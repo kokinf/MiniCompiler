@@ -1,0 +1,6 @@
+int x = 42;
+@invalid
+$invalid
+#invalid
+`invalid
+int y = 100;

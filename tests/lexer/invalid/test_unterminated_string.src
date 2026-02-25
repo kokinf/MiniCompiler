@@ -1,0 +1,4 @@
+"unterminated string
+"another unterminated
+int x = "hello;
+"string with no closing quote

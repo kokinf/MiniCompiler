@@ -1,0 +1,17 @@
+1:1 INT_LITERAL "123" 123
+1:4 IDENTIFIER "abc"
+2:1 FLOAT_LITERAL "12.34" 12.34
+2:6 DOT "."
+2:7 INT_LITERAL "56" 56
+3:1 DOT "."
+3:2 INT_LITERAL "123" 123
+4:1 INT_LITERAL "123" 123
+4:4 DOT "."
+5:1 ILLEGAL "Error at 5:1: integer literal out of range [-2^31, 2^31-1]"
+6:1 MINUS "-"
+6:2 ILLEGAL "Error at 6:2: integer literal out of range [-2^31, 2^31-1]"
+7:1 ILLEGAL "Error at 7:1: integer literal out of range [-2^31, 2^31-1]"
+8:1 FLOAT_LITERAL "1.2" 1.2
+8:4 DOT "."
+8:5 INT_LITERAL "3" 3
+8:1 END_OF_FILE ""

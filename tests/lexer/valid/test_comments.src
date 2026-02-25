@@ -1,0 +1,9 @@
+// This is a single line comment
+int x = 42; // inline comment
+
+/* Multi-line
+   comment */
+
+/* Nested /* comment */ test */
+
+int/*comment between tokens*/y = 100;

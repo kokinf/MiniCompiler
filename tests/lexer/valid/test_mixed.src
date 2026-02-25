@@ -1,0 +1,14 @@
+fn main() {
+    int counter = 42;
+    float pi = 3.14159;
+    bool flag = true;
+    string message = "Hello";
+    
+    if (counter < 100) {
+        counter = counter + 1;
+    } else {
+        counter = 0;
+    }
+    
+    return 0;
+}
