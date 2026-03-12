@@ -1,0 +1,15 @@
+Program:
+  FunctionDecl: test -> bool [line 1]:
+    Parameters:
+    Body:
+      VarDecl: bool a = (true && false)
+      VarDecl: bool b = (true || false)
+      VarDecl: bool c = (!true)
+      VarDecl: bool d = (!false)
+      VarDecl: bool e = ((true && false) || true)
+      VarDecl: bool f = (true || (false && false))
+      VarDecl: bool g = (!(true && false))
+      VarDecl: bool x = true
+      VarDecl: bool y = false
+      VarDecl: bool z = ((x && y) || ((!x) && y))
+      Return: (((((((a && b) && c) && d) && e) && f) && g) && z)

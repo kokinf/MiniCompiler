@@ -7,7 +7,6 @@ import (
 
 type TokenType string
 
-// Типы токенов
 const (
 	ILLEGAL    TokenType = "ILLEGAL"
 	EOF        TokenType = "END_OF_FILE"
@@ -40,6 +39,11 @@ const (
 	DIVIDE   TokenType = "DIVIDE"   // /
 	MODULO   TokenType = "MODULO"   // %
 
+	PLUS_ASSIGN     TokenType = "PLUS_ASSIGN"     // +=
+	MINUS_ASSIGN    TokenType = "MINUS_ASSIGN"    // -=
+	MULTIPLY_ASSIGN TokenType = "MULTIPLY_ASSIGN" // *=
+	DIVIDE_ASSIGN   TokenType = "DIVIDE_ASSIGN"   // /=
+
 	EQ     TokenType = "EQ"     // ==
 	NOT_EQ TokenType = "NOT_EQ" // !=
 	LT     TokenType = "LT"     // <
@@ -59,9 +63,9 @@ const (
 	SEMICOLON TokenType = "SEMICOLON" // ;
 	COMMA     TokenType = "COMMA"     // ,
 	DOT       TokenType = "DOT"       // .
+	ARROW     TokenType = "ARROW"     // ->
 )
 
-// LiteralValue типизированное значение литерального токена
 type LiteralValue struct {
 	IntValue    int32
 	FloatValue  float64
@@ -69,7 +73,6 @@ type LiteralValue struct {
 	BoolValue   bool
 }
 
-// Token лексический токен
 type Token struct {
 	Type    TokenType
 	Lexeme  string
@@ -98,7 +101,6 @@ func NewLiteralToken(tokenType TokenType, lexeme string, line, column int, liter
 	}
 }
 
-// String возвращает строковое представление токена
 func (t Token) String() string {
 	if t.Literal != nil {
 		switch t.Type {
@@ -119,7 +121,6 @@ func (t Token) String() string {
 	return fmt.Sprintf("%d:%d %s \"%s\"", t.Line, t.Column, t.Type, t.Lexeme)
 }
 
-// Карта ключевых слов
 var Keywords = map[string]TokenType{
 	"if":     KW_IF,
 	"else":   KW_ELSE,
@@ -136,7 +137,6 @@ var Keywords = map[string]TokenType{
 	"fn":     KW_FN,
 }
 
-// LookupIdentifier проверяет, является ли идентификатор ключевым словом
 func LookupIdentifier(ident string) TokenType {
 	if tokType, ok := Keywords[ident]; ok {
 		return tokType

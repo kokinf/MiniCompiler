@@ -1,0 +1,95 @@
+Program:
+  FunctionDecl: test1 -> int [line 1]:
+    Parameters:
+      int x
+    Body:
+      IfStmt [line 2]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 2-3]:
+            Return: 1
+      Return: 0
+  FunctionDecl: test2 -> int [line 8]:
+    Parameters:
+      int x
+    Body:
+      IfStmt [line 9]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 9-10]:
+            Return: 1
+        Else:
+          Block [line 11-12]:
+            Return: (-1)
+  FunctionDecl: test3 -> int [line 16]:
+    Parameters:
+      int x
+    Body:
+      IfStmt [line 17]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 17-18]:
+            Return: 1
+        Else:
+          IfStmt [line 19]:
+            Condition:
+              (x < 0)
+            Then:
+              Block [line 19-20]:
+                Return: (-1)
+            Else:
+              Block [line 21-22]:
+                Return: 0
+  FunctionDecl: test4 -> int [line 26]:
+    Parameters:
+      int x
+    Body:
+      IfStmt [line 27]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 28-28]:
+            Return: 1
+        Else:
+          IfStmt [line 29]:
+            Condition:
+              (x < 0)
+            Then:
+              Block [line 30-30]:
+                Return: (-1)
+            Else:
+              Block [line 32-32]:
+                Return: 0
+  FunctionDecl: test5 -> int [line 35]:
+    Parameters:
+      int x
+      int y
+    Body:
+      IfStmt [line 36]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 36-37]:
+            IfStmt [line 37]:
+              Condition:
+                (y > 0)
+              Then:
+                Block [line 37-38]:
+                  Return: (x + y)
+              Else:
+                Block [line 39-40]:
+                  Return: x
+        Else:
+          Block [line 42-43]:
+            IfStmt [line 43]:
+              Condition:
+                (y > 0)
+              Then:
+                Block [line 43-44]:
+                  Return: y
+              Else:
+                Block [line 45-46]:
+                  Return: 0

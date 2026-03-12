@@ -1,0 +1,11 @@
+fn test() -> void {
+    int a;
+    int b = 5;
+    float c = 3.14;
+    bool d = true;
+    string e = "hello";
+    
+    int f = 10, g = 20;  // Not supported yet
+    
+    return;
+}

@@ -1,18 +1,19 @@
-fn main() {
-    int counter = 42;
-    float pi = 3.14159;
-    bool flag = true;
-    string message = "Hello, World!";
-    
+fn main() -> void {
     // This is a comment
-    if (counter < 100) {
-        counter = counter + 1;
+    int x = 42;
+    float y = 3.14;
+    bool flag = true;
+    string s = "Hello, World!";
+    
+    if (x > 0) {
+        return;
     } else {
-        counter = 0;
+        x = x + 1;
     }
     
-    /* Multi-line
-       comment */
+    while (x < 10) {
+        x = x + 1;
+    }
     
-    return 0;
+    return;
 }

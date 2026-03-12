@@ -1,0 +1,32 @@
+Program:
+  FunctionDecl: test1 -> void [line 1]:
+    Parameters:
+    Body:
+      Return
+  FunctionDecl: test2 -> int [line 5]:
+    Parameters:
+    Body:
+      Return: 42
+  FunctionDecl: test3 -> float [line 9]:
+    Parameters:
+    Body:
+      Return: 3.14
+  FunctionDecl: test4 -> bool [line 13]:
+    Parameters:
+    Body:
+      Return: true
+  FunctionDecl: test5 -> string [line 17]:
+    Parameters:
+    Body:
+      Return: "hello"
+  FunctionDecl: test6 -> int [line 21]:
+    Parameters:
+      int x
+    Body:
+      IfStmt [line 22]:
+        Condition:
+          (x > 0)
+        Then:
+          Block [line 22-23]:
+            Return: x
+      Return: 0

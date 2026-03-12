@@ -1,0 +1,17 @@
+Program:
+  FunctionDecl: fibonacci -> int [line 1]:
+    Parameters:
+      int n
+    Body:
+      IfStmt [line 2]:
+        Condition:
+          (n <= 1)
+        Then:
+          Block [line 2-3]:
+            Return: n
+      Return: (fibonacci((n - 1)) + fibonacci((n - 2)))
+  FunctionDecl: main -> void [line 8]:
+    Parameters:
+    Body:
+      VarDecl: int result = fibonacci(10)
+      Return

@@ -1,0 +1,32 @@
+Program:
+  FunctionDecl: no_args_no_return -> void [line 1]:
+    Parameters:
+    Body:
+      Return
+  FunctionDecl: one_arg -> void [line 5]:
+    Parameters:
+      int x
+    Body:
+      Return
+  FunctionDecl: two_args -> int [line 9]:
+    Parameters:
+      int x
+      int y
+    Body:
+      Return: (x + y)
+  FunctionDecl: mixed_args -> void [line 13]:
+    Parameters:
+      int a
+      float b
+      bool c
+      string d
+    Body:
+      Return
+  FunctionDecl: with_return_type -> int [line 17]:
+    Parameters:
+    Body:
+      Return: 42
+  FunctionDecl: forward_decl -> void [line 21]:
+    Parameters:
+    Body:
+      <empty>

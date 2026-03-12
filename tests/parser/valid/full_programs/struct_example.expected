@@ -1,0 +1,24 @@
+Program:
+  StructDecl: Point [line 1]:
+    Fields:
+      int x
+      int y
+  StructDecl: Rectangle [line 6]:
+    Fields:
+      Point topLeft
+      Point bottomRight
+  FunctionDecl: area -> int [line 11]:
+    Parameters:
+      Rectangle rect
+    Body:
+      VarDecl: int width = (x - x)
+      VarDecl: int height = (y - y)
+      Return: (width * height)
+  FunctionDecl: main -> void [line 17]:
+    Parameters:
+    Body:
+      VarDecl: Point p1
+      VarDecl: Point p2
+      VarDecl: Rectangle rect
+      VarDecl: int a = 0
+      Return

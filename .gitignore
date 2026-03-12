@@ -1,1 +1,4 @@
 bin/
+ast.txt
+ast.dot
+ast.json

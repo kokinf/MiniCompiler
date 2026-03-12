@@ -7,10 +7,10 @@
 3:2 INT_LITERAL "123" 123
 4:1 INT_LITERAL "123" 123
 4:4 DOT "."
-5:1 ILLEGAL "Error at 5:1: integer literal out of range [-2^31, 2^31-1]"
+5:1 ILLEGAL "Ошибка в 5:1: целочисленный литерал вне диапазона [-2^31, 2^31-1]"
 6:1 MINUS "-"
-6:2 ILLEGAL "Error at 6:2: integer literal out of range [-2^31, 2^31-1]"
-7:1 ILLEGAL "Error at 7:1: integer literal out of range [-2^31, 2^31-1]"
+6:2 ILLEGAL "Ошибка в 6:2: целочисленный литерал вне диапазона [-2^31, 2^31-1]"
+7:1 ILLEGAL "Ошибка в 7:1: целочисленный литерал вне диапазона [-2^31, 2^31-1]"
 8:1 FLOAT_LITERAL "1.2" 1.2
 8:4 DOT "."
 8:5 INT_LITERAL "3" 3

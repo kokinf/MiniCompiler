@@ -1,2 +1,2 @@
-1:1 ILLEGAL "Error at 1:1: identifier too long (max 255 characters)"
+1:1 ILLEGAL "Ошибка в 1:1: идентификатор слишком длинный (максимум 255 символов)"
 1:1 END_OF_FILE ""

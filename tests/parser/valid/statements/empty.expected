@@ -1,0 +1,48 @@
+Program:
+  FunctionDecl: empty_block -> void [line 1]:
+    Parameters:
+    Body:
+      Block [line 2-3]:
+        Block [line 3-4]:
+          Block [line 4-4]:
+      Return
+  FunctionDecl: empty_if -> void [line 11]:
+    Parameters:
+    Body:
+      IfStmt [line 12]:
+        Condition:
+          true
+        Then:
+          Block [line 12-12]:
+      Return
+  FunctionDecl: empty_else -> void [line 18]:
+    Parameters:
+    Body:
+      IfStmt [line 19]:
+        Condition:
+          false
+        Then:
+          Block [line 19-20]:
+            Return
+        Else:
+          Block [line 21-21]:
+      Return
+  FunctionDecl: empty_while -> void [line 26]:
+    Parameters:
+    Body:
+      WhileStmt [line 27]:
+        Condition:
+          false
+        Body:
+          Block [line 27-27]:
+      Return
+  FunctionDecl: empty_for -> void [line 32]:
+    Parameters:
+    Body:
+      ForStmt [line 33]:
+        Init: <empty>
+        Condition: <empty>
+        Update: <empty>
+        Body:
+          Block [line 33-33]:
+      Return

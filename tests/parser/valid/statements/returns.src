@@ -1,0 +1,26 @@
+fn test1() -> void {
+    return;
+}
+
+fn test2() -> int {
+    return 42;
+}
+
+fn test3() -> float {
+    return 3.14;
+}
+
+fn test4() -> bool {
+    return true;
+}
+
+fn test5() -> string {
+    return "hello";
+}
+
+fn test6(x int) -> int {
+    if (x > 0) {
+        return x;
+    }
+    return 0;
+}

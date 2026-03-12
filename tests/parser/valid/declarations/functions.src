@@ -1,0 +1,21 @@
+fn no_args_no_return() -> void {
+    return;
+}
+
+fn one_arg(x int) -> void {
+    return;
+}
+
+fn two_args(x int, y int) -> int {
+    return x + y;
+}
+
+fn mixed_args(a int, b float, c bool, d string) -> void {
+    return;
+}
+
+fn with_return_type() -> int {
+    return 42;
+}
+
+fn forward_decl();  // Not supported yet

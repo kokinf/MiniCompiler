@@ -1,0 +1,33 @@
+struct Empty {
+}
+
+struct Point {
+    int x;
+    int y;
+}
+
+struct Line {
+    Point start;
+    Point end;
+    float length;
+}
+
+struct Rectangle {
+    Point topLeft;
+    Point bottomRight;
+    string label;
+    bool isFilled;
+}
+
+struct Circle {
+    Point center;
+    float radius;
+    string color;
+}
+
+struct Scene {
+    string name;
+    Rectangle[] rectangles;  // Not supported yet
+    Circle[] circles;        // Not supported yet
+    int count;
+}

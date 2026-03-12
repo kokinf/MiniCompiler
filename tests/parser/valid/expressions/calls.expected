@@ -1,0 +1,26 @@
+Program:
+  FunctionDecl: foo -> int [line 1]:
+    Parameters:
+    Body:
+      Return: 42
+  FunctionDecl: bar -> int [line 5]:
+    Parameters:
+      int x
+      int y
+    Body:
+      Return: (x + y)
+  FunctionDecl: baz -> void [line 9]:
+    Parameters:
+      int a
+      float b
+      bool c
+    Body:
+      Return
+  FunctionDecl: test -> int [line 13]:
+    Parameters:
+    Body:
+      VarDecl: int a = foo()
+      VarDecl: int b = bar(1, 2)
+      VarDecl: int c = bar(bar(1, 2), bar(3, 4))
+      Expr: baz(10, 3.14, true)
+      Return: ((a + b) + c)

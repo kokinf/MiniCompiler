@@ -1,0 +1,14 @@
+Program:
+  FunctionDecl: test -> int [line 1]:
+    Parameters:
+    Body:
+      VarDecl: int x = 5
+      VarDecl: int y = 10
+      Expr: x = 20
+      Expr: y = (x + 5)
+      Expr: x = y = 30
+      Expr: x = (x + 5)
+      Expr: y = (y - 3)
+      Expr: x = (x * 2)
+      Expr: y = (y / 4)
+      Return: (x + y)

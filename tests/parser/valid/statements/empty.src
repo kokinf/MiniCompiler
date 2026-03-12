@@ -1,0 +1,36 @@
+fn empty_block() -> void {
+    {
+        {
+            {
+            }
+        }
+    }
+    return;
+}
+
+fn empty_if() -> void {
+    if (true) {
+        // nothing
+    }
+    return;
+}
+
+fn empty_else() -> void {
+    if (false) {
+        return;
+    } else {
+    }
+    return;
+}
+
+fn empty_while() -> void {
+    while (false) {
+    }
+    return;
+}
+
+fn empty_for() -> void {
+    for (;;) {
+    }
+    return;
+}

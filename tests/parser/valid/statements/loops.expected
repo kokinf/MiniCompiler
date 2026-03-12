@@ -1,0 +1,75 @@
+Program:
+  FunctionDecl: test_while -> int [line 1]:
+    Parameters:
+    Body:
+      VarDecl: int i = 0
+      VarDecl: int sum = 0
+      WhileStmt [line 5]:
+        Condition:
+          (i < 10)
+        Body:
+          Block [line 5-7]:
+            Expr: sum = (sum + i)
+            Expr: i = (i + 1)
+      Return: sum
+  FunctionDecl: test_for -> int [line 13]:
+    Parameters:
+    Body:
+      VarDecl: int sum = 0
+      ForStmt [line 16]:
+        Init: VarDecl: int i = 0
+        Condition: (i < 10)
+        Update: i = (i + 1)
+        Body:
+          Block [line 16-17]:
+            Expr: sum = (sum + i)
+      Return: sum
+  FunctionDecl: test_for_cond -> int [line 23]:
+    Parameters:
+    Body:
+      VarDecl: int i = 0
+      VarDecl: int sum = 0
+      ForStmt [line 27]:
+        Init: <empty>
+        Condition: (i < 10)
+        Update: <empty>
+        Body:
+          Block [line 27-29]:
+            Expr: sum = (sum + i)
+            Expr: i = (i + 1)
+      Return: sum
+  FunctionDecl: test_for_empty -> int [line 35]:
+    Parameters:
+    Body:
+      VarDecl: int i = 0
+      ForStmt [line 38]:
+        Init: <empty>
+        Condition: <empty>
+        Update: <empty>
+        Body:
+          Block [line 38-40]:
+            Expr: i = (i + 1)
+            IfStmt [line 40]:
+              Condition:
+                (i > 100)
+              Then:
+                Block [line 40-41]:
+                  Return: i
+  FunctionDecl: test_nested_loops -> int [line 46]:
+    Parameters:
+    Body:
+      VarDecl: int sum = 0
+      ForStmt [line 49]:
+        Init: VarDecl: int i = 0
+        Condition: (i < 5)
+        Update: i = (i + 1)
+        Body:
+          Block [line 49-50]:
+            ForStmt [line 50]:
+              Init: VarDecl: int j = 0
+              Condition: (j < 5)
+              Update: j = (j + 1)
+              Body:
+                Block [line 50-51]:
+                  Expr: sum = (sum + (i * j))
+      Return: sum

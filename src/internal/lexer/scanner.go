@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"mikrocompiler/internal/token"
+	"mikrocompiler/src/internal/token"
 )
 
 type Scanner struct {
@@ -27,7 +27,6 @@ func NewScanner(input string) *Scanner {
 	return s
 }
 
-// readChar читает следующий символ из ввода
 func (s *Scanner) readChar() {
 	if s.readPosition >= len(s.input) {
 		s.ch = 0
@@ -38,12 +37,10 @@ func (s *Scanner) readChar() {
 	s.position = s.readPosition
 	s.readPosition++
 
-	// Обработка окончаний строк
 	if s.ch == '\n' {
 		s.line++
 		s.column = 0
 	} else if s.ch == '\r' {
-		// Если за \r следует \n, пропустить и \n тоже
 		if s.readPosition < len(s.input) && s.input[s.readPosition] == '\n' {
 			s.readPosition++
 		}
@@ -54,7 +51,6 @@ func (s *Scanner) readChar() {
 	}
 }
 
-// peekChar смотрит на следующий символ, не потребляя его
 func (s *Scanner) peekChar() byte {
 	if s.readPosition >= len(s.input) {
 		return 0
@@ -62,7 +58,6 @@ func (s *Scanner) peekChar() byte {
 	return s.input[s.readPosition]
 }
 
-// NextToken возвращает следующий токен
 func (s *Scanner) NextToken() token.Token {
 	s.skipWhitespace()
 
@@ -76,7 +71,6 @@ func (s *Scanner) NextToken() token.Token {
 		s.skipWhitespace()
 	}
 
-	// Если достигнут конец файла, вернуть токен EOF
 	if s.ch == 0 {
 		return token.NewToken(token.EOF, "", s.line, 1)
 	}
@@ -84,7 +78,24 @@ func (s *Scanner) NextToken() token.Token {
 	line, column := s.line, s.column
 
 	switch s.ch {
-	// Операторы
+	// Сначала проверяем двухсимвольные операторы
+	case '-':
+		if s.peekChar() == '>' {
+			s.readChar() // потребляем '-'
+			tok := token.NewToken(token.ARROW, "->", line, column)
+			s.readChar() // потребляем '>'
+			return tok
+		}
+		if s.peekChar() == '=' {
+			s.readChar()
+			tok := token.NewToken(token.MINUS_ASSIGN, "-=", line, column)
+			s.readChar()
+			return tok
+		}
+		tok := token.NewToken(token.MINUS, "-", line, column)
+		s.readChar()
+		return tok
+
 	case '=':
 		if s.peekChar() == '=' {
 			s.readChar()
@@ -97,21 +108,34 @@ func (s *Scanner) NextToken() token.Token {
 		return tok
 
 	case '+':
+		if s.peekChar() == '=' {
+			s.readChar()
+			tok := token.NewToken(token.PLUS_ASSIGN, "+=", line, column)
+			s.readChar()
+			return tok
+		}
 		tok := token.NewToken(token.PLUS, "+", line, column)
 		s.readChar()
 		return tok
 
-	case '-':
-		tok := token.NewToken(token.MINUS, "-", line, column)
-		s.readChar()
-		return tok
-
 	case '*':
+		if s.peekChar() == '=' {
+			s.readChar()
+			tok := token.NewToken(token.MULTIPLY_ASSIGN, "*=", line, column)
+			s.readChar()
+			return tok
+		}
 		tok := token.NewToken(token.MULTIPLY, "*", line, column)
 		s.readChar()
 		return tok
 
 	case '/':
+		if s.peekChar() == '=' {
+			s.readChar()
+			tok := token.NewToken(token.DIVIDE_ASSIGN, "/=", line, column)
+			s.readChar()
+			return tok
+		}
 		tok := token.NewToken(token.DIVIDE, "/", line, column)
 		s.readChar()
 		return tok
@@ -128,7 +152,7 @@ func (s *Scanner) NextToken() token.Token {
 			s.readChar()
 			return tok
 		}
-		tok := s.newIllegalToken(fmt.Sprintf("недопустимый символ '%c'", s.ch), line, column)
+		tok := token.NewToken(token.NOT_EQ, "!", line, column)
 		s.readChar()
 		return tok
 
@@ -176,7 +200,6 @@ func (s *Scanner) NextToken() token.Token {
 		s.readChar()
 		return tok
 
-	// Разделители
 	case '(':
 		tok := token.NewToken(token.LPAREN, "(", line, column)
 		s.readChar()
@@ -214,7 +237,6 @@ func (s *Scanner) NextToken() token.Token {
 		s.readChar()
 		return tok
 
-	// Строковые литералы
 	case '"':
 		return s.readString(line, column)
 
@@ -289,7 +311,6 @@ func (s *Scanner) readNumber(line, column int) token.Token {
 		return s.newIllegalToken("целочисленный литерал вне диапазона [-2^31, 2^31-1]", line, column)
 	}
 
-	// Диапазон целого числа (от -2147483648 до 2147483647)
 	if intVal < -2147483648 || intVal > 2147483647 {
 		return s.newIllegalToken("целочисленный литерал вне диапазона [-2^31, 2^31-1]", line, column)
 	}
@@ -325,16 +346,13 @@ func (s *Scanner) readString(line, column int) token.Token {
 		&token.LiteralValue{StringValue: content})
 }
 
-// skipWhitespace пропускает пробельные символы
 func (s *Scanner) skipWhitespace() {
 	for s.ch == ' ' || s.ch == '\t' || s.ch == '\n' || s.ch == '\r' {
 		s.readChar()
 	}
 }
 
-// skipSingleLineComment пропускает однострочный комментарий
 func (s *Scanner) skipSingleLineComment() {
-	// Пропуск "//"
 	s.readChar()
 	s.readChar()
 
@@ -343,9 +361,7 @@ func (s *Scanner) skipSingleLineComment() {
 	}
 }
 
-// skipMultiLineComment пропускает многострочный комментарий
 func (s *Scanner) skipMultiLineComment() {
-	// Пропуск "/*"
 	s.readChar()
 	s.readChar()
 
@@ -365,7 +381,6 @@ func (s *Scanner) skipMultiLineComment() {
 	}
 }
 
-// PeekToken возвращает следующий токен, не потребляя его
 func (s *Scanner) PeekToken() token.Token {
 	position := s.position
 	readPosition := s.readPosition
@@ -388,17 +403,14 @@ func (s *Scanner) IsAtEnd() bool {
 	return s.position >= len(s.input)
 }
 
-// GetLine возвращает текущий номер строки
 func (s *Scanner) GetLine() int {
 	return s.line
 }
 
-// GetColumn возвращает текущий номер колонки
 func (s *Scanner) GetColumn() int {
 	return s.column
 }
 
-// newIllegalToken создает недопустимый токен с сообщением об ошибке
 func (s *Scanner) newIllegalToken(message string, line, column int) token.Token {
 	return token.NewToken(token.ILLEGAL, fmt.Sprintf("Ошибка в %d:%d: %s", line, column, message), line, column)
 }

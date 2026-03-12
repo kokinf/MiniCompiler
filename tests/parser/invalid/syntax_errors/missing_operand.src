@@ -1,0 +1,4 @@
+fn test() -> void {
+    int x = 5 + ;
+    return;
+}

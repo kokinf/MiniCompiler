@@ -1,0 +1,16 @@
+Program:
+  FunctionDecl: test -> bool [line 1]:
+    Parameters:
+    Body:
+      VarDecl: bool a = (5 > 3)
+      VarDecl: bool b = (5 >= 5)
+      VarDecl: bool c = (5 < 10)
+      VarDecl: bool d = (5 <= 5)
+      VarDecl: bool e = (5 == 5)
+      VarDecl: bool f = (5 != 6)
+      VarDecl: bool g = ((5 > 3) && (10 < 20))
+      VarDecl: bool h = ((5 > 10) || (3 < 4))
+      VarDecl: bool i = (((5 > 3) && (10 < 20)) || (2 == 2))
+      VarDecl: bool j = ((5 + 3) > (2 * 4))
+      VarDecl: bool k = ((10 - 5) == (15 / 3))
+      Return: ((((((((((a && b) && c) && d) && e) && f) && g) && h) && i) && j) && k)

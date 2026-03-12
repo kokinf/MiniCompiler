@@ -1,0 +1,19 @@
+Program:
+  FunctionDecl: test -> int [line 1]:
+    Parameters:
+    Body:
+      VarDecl: int a = (1 + 2)
+      VarDecl: int b = (5 - 3)
+      VarDecl: int c = (4 * 6)
+      VarDecl: int d = (10 / 2)
+      VarDecl: int e = (17 % 5)
+      VarDecl: int f = (1 + (2 * 3))
+      VarDecl: int g = ((1 + 2) * 3)
+      VarDecl: int h = ((10 - 5) - 2)
+      VarDecl: int i = ((2 * 3) + (4 * 5))
+      VarDecl: int j = (-5)
+      VarDecl: int k = (-(-5))
+      VarDecl: int l = (10 + (-3))
+      VarDecl: float m = (3.14 + 2.5)
+      VarDecl: float n = (10 / 3)
+      Return: (((((((((((a + b) + c) + d) + e) + f) + g) + h) + i) + j) + k) + l)

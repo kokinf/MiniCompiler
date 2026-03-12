@@ -1,0 +1,16 @@
+fn test() -> bool {
+    bool a = true && false;
+    bool b = true || false;
+    bool c = !true;
+    bool d = !false;
+    
+    bool e = true && false || true;
+    bool f = true || false && false;
+    bool g = !(true && false);
+    
+    bool x = true;
+    bool y = false;
+    bool z = x && y || !x && y;
+    
+    return a && b && c && d && e && f && g && z;
+}

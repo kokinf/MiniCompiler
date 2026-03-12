@@ -1,0 +1,25 @@
+fn test() -> int {
+    // Basic arithmetic
+    int a = 1 + 2;
+    int b = 5 - 3;
+    int c = 4 * 6;
+    int d = 10 / 2;
+    int e = 17 % 5;
+    
+    // Precedence
+    int f = 1 + 2 * 3;
+    int g = (1 + 2) * 3;
+    int h = 10 - 5 - 2;
+    int i = 2 * 3 + 4 * 5;
+    
+    // Unary
+    int j = -5;
+    int k = - -5;
+    int l = 10 + -3;
+    
+    // Float
+    float m = 3.14 + 2.5;
+    float n = 10.0 / 3.0;
+    
+    return a + b + c + d + e + f + g + h + i + j + k + l;
+}

@@ -1,0 +1,23 @@
+struct Point {
+    int x;
+    int y;
+}
+
+struct Rectangle {
+    Point topLeft;
+    Point bottomRight;
+}
+
+fn area(rect Rectangle) -> int {
+    int width = rect.bottomRight.x - rect.topLeft.x;
+    int height = rect.bottomRight.y - rect.topLeft.y;
+    return width * height;
+}
+
+fn main() -> void {
+    Point p1;
+    Point p2;
+    Rectangle rect;
+    int a = 0;
+    return;
+}

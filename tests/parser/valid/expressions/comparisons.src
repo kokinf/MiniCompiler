@@ -1,0 +1,19 @@
+fn test() -> bool {
+    bool a = 5 > 3;
+    bool b = 5 >= 5;
+    bool c = 5 < 10;
+    bool d = 5 <= 5;
+    bool e = 5 == 5;
+    bool f = 5 != 6;
+    
+    // Combined
+    bool g = 5 > 3 && 10 < 20;
+    bool h = 5 > 10 || 3 < 4;
+    bool i = (5 > 3) && (10 < 20) || (2 == 2);
+    
+    // With arithmetic
+    bool j = 5 + 3 > 2 * 4;
+    bool k = 10 - 5 == 15 / 3;
+    
+    return a && b && c && d && e && f && g && h && i && j && k;
+}
