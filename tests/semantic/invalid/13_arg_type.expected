@@ -1,0 +1,13 @@
+Symbol Table:
+global scope (level 0):
+  add: function function -> int (line 1)
+  main: function function -> int (line 5)
+
+
+=== Ошибки семантического анализа ===
+argument_type_mismatch: argument 2: expected int, got float
+  --> line 6, column 19
+  |
+  = in function main
+  = argument 2: expected int, got float
+

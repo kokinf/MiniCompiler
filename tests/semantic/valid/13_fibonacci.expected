@@ -1,0 +1,5 @@
+Symbol Table:
+global scope (level 0):
+  fibonacci: function function -> int (line 1)
+  main: function function -> int (line 8)
+

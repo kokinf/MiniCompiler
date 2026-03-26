@@ -1,4 +1,5 @@
 bin/
-ast.txt
-ast.dot
-ast.json
+*.json
+*.dot
+*.txt
+*.png

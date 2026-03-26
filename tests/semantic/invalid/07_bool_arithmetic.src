@@ -1,0 +1,4 @@
+fn main() -> int {
+    int x = 5 + true;
+    return x;
+}

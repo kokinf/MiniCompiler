@@ -47,13 +47,6 @@ func (p *Parser) peek() token.Token {
 	return token.Token{Type: token.EOF, Lexeme: "", Line: 0, Column: 0}
 }
 
-func (p *Parser) peekNext() token.Token {
-	if p.position+2 < len(p.tokens) {
-		return p.tokens[p.position+2]
-	}
-	return token.Token{Type: token.EOF, Lexeme: "", Line: 0, Column: 0}
-}
-
 func (p *Parser) expect(expected token.TokenType) bool {
 	if p.current.Type == expected {
 		p.nextToken()
@@ -80,30 +73,16 @@ func (p *Parser) consume() token.Token {
 	return tok
 }
 
-func (p *Parser) consumeIf(typ token.TokenType) (token.Token, bool) {
-	if p.current.Type == typ {
-		tok := p.current
-		p.nextToken()
-		return tok, true
-	}
-	return token.Token{}, false
-}
-
 func (p *Parser) addError(msg string) {
 	p.errors = append(p.errors, msg)
 }
 
-func (p *Parser) isAtEnd() bool {
-	return p.current.Type == token.EOF
-}
-
-// Parse запускает парсинг программы
 func (p *Parser) Parse() *ast.Program {
 	program := &ast.Program{
 		Declarations: []ast.Declaration{},
 	}
 
-	for !p.isAtEnd() {
+	for p.current.Type != token.EOF {
 		decl := p.parseDeclaration()
 		if decl != nil {
 			program.Declarations = append(program.Declarations, decl)
@@ -115,7 +94,6 @@ func (p *Parser) Parse() *ast.Program {
 	return program
 }
 
-// parseDeclaration парсит объявление
 func (p *Parser) parseDeclaration() ast.Declaration {
 	switch p.current.Type {
 	case token.KW_FN:
@@ -129,7 +107,6 @@ func (p *Parser) parseDeclaration() ast.Declaration {
 	}
 }
 
-// parseFunctionDecl парсит объявление функции
 func (p *Parser) parseFunctionDecl() *ast.FunctionDecl {
 	fnToken := p.consume()
 
@@ -144,7 +121,6 @@ func (p *Parser) parseFunctionDecl() *ast.FunctionDecl {
 	}
 	p.nextToken()
 
-	// Параметры
 	if !p.expect(token.LPAREN) {
 		return nil
 	}
@@ -187,7 +163,6 @@ func (p *Parser) parseFunctionDecl() *ast.FunctionDecl {
 	}
 }
 
-// parseParameters парсит параметры функции
 func (p *Parser) parseParameters() []*ast.Parameter {
 	params := []*ast.Parameter{}
 
@@ -201,7 +176,7 @@ func (p *Parser) parseParameters() []*ast.Parameter {
 	}
 
 	for p.current.Type == token.COMMA {
-		p.nextToken() // потребляем ','
+		p.nextToken()
 		param := p.parseParameter()
 		if param != nil {
 			params = append(params, param)
@@ -211,7 +186,6 @@ func (p *Parser) parseParameters() []*ast.Parameter {
 	return params
 }
 
-// parseParameter парсит один параметр
 func (p *Parser) parseParameter() *ast.Parameter {
 	if p.current.Type != token.IDENTIFIER {
 		p.addError(fmt.Sprintf("ожидалось имя параметра, получен %s (строка %d, колонка %d)",
@@ -225,7 +199,6 @@ func (p *Parser) parseParameter() *ast.Parameter {
 	}
 	p.nextToken()
 
-	// После имени должен идти тип
 	paramType := p.parseType()
 
 	return &ast.Parameter{
@@ -235,11 +208,9 @@ func (p *Parser) parseParameter() *ast.Parameter {
 	}
 }
 
-// parseStructDecl парсит объявление структуры
 func (p *Parser) parseStructDecl() *ast.StructDecl {
 	structToken := p.consume()
 
-	// Имя структуры
 	if p.current.Type != token.IDENTIFIER {
 		p.addError(fmt.Sprintf("ожидалось имя структуры, получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
@@ -251,88 +222,69 @@ func (p *Parser) parseStructDecl() *ast.StructDecl {
 	}
 	p.nextToken()
 
-	// Поля структуры
 	if !p.expect(token.LBRACE) {
 		return nil
 	}
 	fields := []*ast.VarDecl{}
 
-	for p.current.Type != token.RBRACE && !p.isAtEnd() {
-
-		if p.current.Type == token.KW_INT || p.current.Type == token.KW_FLOAT ||
-			p.current.Type == token.KW_BOOL || p.current.Type == token.IDENTIFIER {
-
-			varType := p.parseType()
-
-			if p.current.Type != token.IDENTIFIER {
-				p.addError(fmt.Sprintf("ожидалось имя поля, получен %s (строка %d, колонка %d)",
-					p.current.Type, p.current.Line, p.current.Column))
-				for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && !p.isAtEnd() {
-					p.nextToken()
-				}
-				if p.current.Type == token.SEMICOLON {
-					p.nextToken()
-				}
-				continue
-			}
-
-			fieldName := &ast.Identifier{
-				Token: p.current,
-				Value: p.current.Lexeme,
-			}
+	for p.current.Type != token.RBRACE && p.current.Type != token.EOF {
+		// Парсим тип поля
+		if p.current.Type != token.KW_INT && p.current.Type != token.KW_FLOAT &&
+			p.current.Type != token.KW_BOOL && p.current.Type != token.IDENTIFIER {
+			p.addError(fmt.Sprintf("ожидался тип поля, получен %s", p.current.Type))
 			p.nextToken()
+			continue
+		}
 
-			// Инициализатор не допускается в полях структуры
-			if p.current.Type == token.ASSIGN {
-				p.addError("поля структуры не могут иметь инициализаторы")
-				for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && !p.isAtEnd() {
-					p.nextToken()
-				}
-			}
+		varType := p.parseType()
 
-			field := &ast.VarDecl{
-				Token: varType.Token,
-				Type:  varType,
-				Name:  fieldName,
-			}
-			fields = append(fields, field)
-
-			// Ожидаем точку с запятой или закрывающую скобку
-			if p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE {
-				p.addError(fmt.Sprintf("ожидалась ';' или '}}', получен %s (строка %d, колонка %d)",
-					p.current.Type, p.current.Line, p.current.Column))
-				for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && !p.isAtEnd() {
-					p.nextToken()
-				}
+		// Парсим имя поля
+		if p.current.Type != token.IDENTIFIER {
+			p.addError(fmt.Sprintf("ожидалось имя поля, получен %s", p.current.Type))
+			// Пропускаем до точки с запятой или закрывающей скобки
+			for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && p.current.Type != token.EOF {
+				p.nextToken()
 			}
 			if p.current.Type == token.SEMICOLON {
 				p.nextToken()
 			}
-		} else {
-			// Если встретили неожиданный токен
-			if p.current.Type == token.RBRACE {
-				break
-			}
-			if p.current.Type == token.LBRACKET {
-				p.nextToken()
-				for p.current.Type != token.RBRACKET && !p.isAtEnd() {
-					p.nextToken()
-				}
-				if p.current.Type == token.RBRACKET {
-					p.nextToken()
-				}
-				if p.current.Type == token.IDENTIFIER {
-					p.nextToken()
-				}
-				if p.current.Type == token.SEMICOLON {
-					p.nextToken()
-				}
-				continue
-			}
+			continue
+		}
 
-			p.addError(fmt.Sprintf("неожиданный токен в объявлении структуры: %s (строка %d, колонка %d)",
-				p.current.Type, p.current.Line, p.current.Column))
+		fieldName := &ast.Identifier{
+			Token: p.current,
+			Value: p.current.Lexeme,
+		}
+		p.nextToken()
+
+		// Проверка на инициализатор
+		if p.current.Type == token.ASSIGN {
+			p.addError("поля структуры не могут иметь инициализаторы")
+			// Пропускаем выражение инициализации
+			for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && p.current.Type != token.EOF {
+				p.nextToken()
+			}
+		}
+
+		field := &ast.VarDecl{
+			Token: varType.Token,
+			Type:  varType,
+			Name:  fieldName,
+		}
+		fields = append(fields, field)
+
+		// Ожидаем точку с запятой
+		if p.current.Type == token.SEMICOLON {
 			p.nextToken()
+		} else if p.current.Type != token.RBRACE {
+			p.addError(fmt.Sprintf("ожидалась ';' или '}}', получен %s", p.current.Type))
+			// Пропускаем до точки с запятой или закрывающей скобки
+			for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && p.current.Type != token.EOF {
+				p.nextToken()
+			}
+			if p.current.Type == token.SEMICOLON {
+				p.nextToken()
+			}
 		}
 	}
 
@@ -347,8 +299,14 @@ func (p *Parser) parseStructDecl() *ast.StructDecl {
 	}
 }
 
-// parseVarDecl парсит объявление переменной
 func (p *Parser) parseVarDecl() ast.Declaration {
+	if p.current.Type != token.KW_INT && p.current.Type != token.KW_FLOAT &&
+		p.current.Type != token.KW_BOOL && p.current.Type != token.IDENTIFIER {
+		p.addError(fmt.Sprintf("ожидался тип, получен %s (строка %d, колонка %d)",
+			p.current.Type, p.current.Line, p.current.Column))
+		return nil
+	}
+
 	startPos := p.position
 	startToken := p.current
 
@@ -371,18 +329,16 @@ func (p *Parser) parseVarDecl() ast.Declaration {
 	}
 	p.nextToken()
 
-	// Опциональная инициализация
 	var initializer ast.Expression = nil
 	if p.current.Type == token.ASSIGN {
 		p.nextToken()
 		initializer = p.parseExpression()
 	}
 
-	// Ожидаем точку с запятой
 	if p.current.Type != token.SEMICOLON {
 		p.addError(fmt.Sprintf("ожидалась ';', получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
-		for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && !p.isAtEnd() {
+		for p.current.Type != token.SEMICOLON && p.current.Type != token.RBRACE && p.current.Type != token.EOF {
 			p.nextToken()
 		}
 		if p.current.Type == token.SEMICOLON {
@@ -390,7 +346,7 @@ func (p *Parser) parseVarDecl() ast.Declaration {
 		}
 		return nil
 	}
-	p.nextToken() // потребляем ';'
+	p.nextToken()
 
 	return &ast.VarDecl{
 		Token:       varType.Token,
@@ -400,7 +356,6 @@ func (p *Parser) parseVarDecl() ast.Declaration {
 	}
 }
 
-// parseStatement парсит инструкцию
 func (p *Parser) parseStatement() ast.Statement {
 	switch p.current.Type {
 	case token.LBRACE:
@@ -414,16 +369,14 @@ func (p *Parser) parseStatement() ast.Statement {
 	case token.KW_RETURN:
 		return p.parseReturnStmt()
 	case token.KW_INT, token.KW_FLOAT, token.KW_BOOL:
-		// Объявление переменной с базовым типом
 		decl := p.parseVarDecl()
 		if decl != nil {
 			return decl.(*ast.VarDecl)
 		}
 		return nil
 	case token.IDENTIFIER:
-
-		// Проверяем, является ли следующий токен идентификатором
 		next := p.peek()
+
 		if next.Type == token.IDENTIFIER {
 			decl := p.parseVarDecl()
 			if decl != nil {
@@ -431,10 +384,19 @@ func (p *Parser) parseStatement() ast.Statement {
 			}
 			return nil
 		}
-		// Иначе это выражение
+
+		if next.Type == token.ASSIGN {
+			p.addError(fmt.Sprintf("объявление переменной должно содержать тип (строка %d, колонка %d)",
+				p.current.Line, p.current.Column))
+			p.parseExpression()
+			if p.current.Type == token.SEMICOLON {
+				p.nextToken()
+			}
+			return nil
+		}
+
 		return p.parseExprStmt()
 	case token.SEMICOLON:
-		// Пустая инструкция
 		p.nextToken()
 		return nil
 	default:
@@ -442,9 +404,7 @@ func (p *Parser) parseStatement() ast.Statement {
 	}
 }
 
-// parseBlockStmt парсит блок инструкций { ... }
 func (p *Parser) parseBlockStmt() *ast.BlockStmt {
-	// Проверяем, что текущий токен - '{'
 	if p.current.Type != token.LBRACE {
 		p.addError(fmt.Sprintf("ожидался токен LBRACE, получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
@@ -455,14 +415,13 @@ func (p *Parser) parseBlockStmt() *ast.BlockStmt {
 		Token:      p.current,
 		Statements: []ast.Statement{},
 	}
-	p.nextToken() // потребляем '{'
+	p.nextToken()
 
-	for p.current.Type != token.RBRACE && !p.isAtEnd() {
+	for p.current.Type != token.RBRACE && p.current.Type != token.EOF {
 		stmt := p.parseStatement()
 		if stmt != nil {
 			block.Statements = append(block.Statements, stmt)
 		} else {
-			// Если не удалось распарсить инструкцию, пропускаем токен
 			p.nextToken()
 		}
 	}
@@ -474,12 +433,11 @@ func (p *Parser) parseBlockStmt() *ast.BlockStmt {
 	return block
 }
 
-// parseIfStmt парсит if-инструкцию
 func (p *Parser) parseIfStmt() *ast.IfStmt {
 	ifStmt := &ast.IfStmt{
 		Token: p.current,
 	}
-	p.nextToken() // потребляем 'if'
+	p.nextToken()
 
 	if !p.expect(token.LPAREN) {
 		return nil
@@ -489,11 +447,9 @@ func (p *Parser) parseIfStmt() *ast.IfStmt {
 		return nil
 	}
 
-	// Проверяем, является ли следующая инструкция блоком
 	if p.current.Type == token.LBRACE {
 		ifStmt.Consequence = p.parseBlockStmt()
 	} else {
-		// Оборачиваем одиночную инструкцию в блок
 		stmt := p.parseStatement()
 		if stmt != nil {
 			block := &ast.BlockStmt{
@@ -504,13 +460,12 @@ func (p *Parser) parseIfStmt() *ast.IfStmt {
 		}
 	}
 
-	// Обработка else (опционально)
 	if p.current.Type == token.KW_ELSE {
-		p.nextToken() // потребляем 'else'
+		p.nextToken()
+
 		if p.current.Type == token.LBRACE {
 			ifStmt.Alternative = p.parseBlockStmt()
 		} else if p.current.Type == token.KW_IF {
-			// else if обрабатывается как if внутри else
 			ifStmt.Alternative = p.parseIfStmt()
 		} else {
 			stmt := p.parseStatement()
@@ -527,12 +482,11 @@ func (p *Parser) parseIfStmt() *ast.IfStmt {
 	return ifStmt
 }
 
-// parseWhileStmt парсит while-инструкцию
 func (p *Parser) parseWhileStmt() *ast.WhileStmt {
 	whileStmt := &ast.WhileStmt{
 		Token: p.current,
 	}
-	p.nextToken() // потребляем 'while'
+	p.nextToken()
 
 	if !p.expect(token.LPAREN) {
 		return nil
@@ -557,27 +511,23 @@ func (p *Parser) parseWhileStmt() *ast.WhileStmt {
 	return whileStmt
 }
 
-// parseForStmt парсит for-инструкцию
 func (p *Parser) parseForStmt() *ast.ForStmt {
 	forStmt := &ast.ForStmt{
 		Token: p.current,
 	}
-	p.nextToken() // потребляем 'for'
+	p.nextToken()
 
 	if !p.expect(token.LPAREN) {
 		return nil
 	}
 
-	// Инициализация (может быть пустой)
 	if p.current.Type != token.SEMICOLON {
 		forStmt.Init = p.parseStatement()
 	} else {
-		// Пустая инициализация
 		forStmt.Init = nil
-		p.nextToken() // потребляем ';'
+		p.nextToken()
 	}
 
-	// Условие (может быть пустым)
 	if p.current.Type != token.SEMICOLON {
 		forStmt.Condition = p.parseExpression()
 	}
@@ -585,7 +535,6 @@ func (p *Parser) parseForStmt() *ast.ForStmt {
 		return nil
 	}
 
-	// Обновление (может быть пустым)
 	if p.current.Type != token.RPAREN {
 		forStmt.Update = p.parseExpression()
 	}
@@ -608,12 +557,11 @@ func (p *Parser) parseForStmt() *ast.ForStmt {
 	return forStmt
 }
 
-// parseReturnStmt парсит return-инструкцию
 func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
 	returnStmt := &ast.ReturnStmt{
 		Token: p.current,
 	}
-	p.nextToken() // потребляем 'return'
+	p.nextToken()
 
 	if p.current.Type != token.SEMICOLON {
 		returnStmt.RetValue = p.parseExpression()
@@ -626,7 +574,6 @@ func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
 	return returnStmt
 }
 
-// parseExprStmt парсит выражение как инструкцию
 func (p *Parser) parseExprStmt() *ast.ExprStmt {
 	exprStmt := &ast.ExprStmt{
 		Token:      p.current,
@@ -640,12 +587,15 @@ func (p *Parser) parseExprStmt() *ast.ExprStmt {
 	return exprStmt
 }
 
-// parseExpression парсит выражение (начинаем с самого низкого приоритета)
 func (p *Parser) parseExpression() ast.Expression {
+	if p.current.Type == token.ILLEGAL {
+		p.addError(p.current.Lexeme)
+		p.nextToken()
+		return nil
+	}
 	return p.parseAssignment()
 }
 
-// parseAssignment парсит присваивание (право-ассоциативное)
 func (p *Parser) parseAssignment() ast.Expression {
 	expr := p.parseLogicalOr()
 
@@ -655,14 +605,20 @@ func (p *Parser) parseAssignment() ast.Expression {
 		p.current.Type == token.MULTIPLY_ASSIGN ||
 		p.current.Type == token.DIVIDE_ASSIGN {
 
+		if _, ok := expr.(*ast.Identifier); !ok {
+			p.addError(fmt.Sprintf("левая часть присваивания должна быть идентификатором (строка %d, колонка %d)",
+				p.current.Line, p.current.Column))
+			p.nextToken()
+			p.parseAssignment()
+			return expr
+		}
+
 		tok := p.current
 		operator := tok.Lexeme
 		p.nextToken()
-		right := p.parseAssignment() // право-ассоциативно
+		right := p.parseAssignment()
 
-		// Для составных операторов создаем бинарное выражение
 		if operator != "=" {
-			// a += b  превращается в a = a + b
 			left := expr
 			return &ast.AssignmentExpr{
 				Token:    tok,
@@ -671,7 +627,7 @@ func (p *Parser) parseAssignment() ast.Expression {
 				Right: &ast.BinaryExpr{
 					Token:    tok,
 					Left:     left,
-					Operator: operator[:len(operator)-1], // убираем '='
+					Operator: operator[:len(operator)-1],
 					Right:    right,
 				},
 			}
@@ -688,7 +644,6 @@ func (p *Parser) parseAssignment() ast.Expression {
 	return expr
 }
 
-// parseLogicalOr парсит логическое ИЛИ (||)
 func (p *Parser) parseLogicalOr() ast.Expression {
 	expr := p.parseLogicalAnd()
 
@@ -707,7 +662,6 @@ func (p *Parser) parseLogicalOr() ast.Expression {
 	return expr
 }
 
-// parseLogicalAnd парсит логическое И (&&)
 func (p *Parser) parseLogicalAnd() ast.Expression {
 	expr := p.parseEquality()
 
@@ -726,7 +680,6 @@ func (p *Parser) parseLogicalAnd() ast.Expression {
 	return expr
 }
 
-// parseEquality парсит сравнение на равенство (==, !=)
 func (p *Parser) parseEquality() ast.Expression {
 	expr := p.parseRelational()
 
@@ -745,7 +698,6 @@ func (p *Parser) parseEquality() ast.Expression {
 	return expr
 }
 
-// parseRelational парсит операторы сравнения (<, <=, >, >=)
 func (p *Parser) parseRelational() ast.Expression {
 	expr := p.parseAdditive()
 
@@ -765,7 +717,6 @@ func (p *Parser) parseRelational() ast.Expression {
 	return expr
 }
 
-// parseAdditive парсит сложение и вычитание (+, -)
 func (p *Parser) parseAdditive() ast.Expression {
 	expr := p.parseMultiplicative()
 
@@ -784,7 +735,6 @@ func (p *Parser) parseAdditive() ast.Expression {
 	return expr
 }
 
-// parseMultiplicative парсит умножение, деление и остаток (*, /, %)
 func (p *Parser) parseMultiplicative() ast.Expression {
 	expr := p.parseUnary()
 
@@ -804,9 +754,7 @@ func (p *Parser) parseMultiplicative() ast.Expression {
 	return expr
 }
 
-// parseUnary парсит унарные операторы (-, !)
 func (p *Parser) parseUnary() ast.Expression {
-	// Унарный минус
 	if p.current.Type == token.MINUS {
 		tok := p.current
 		operator := tok.Lexeme
@@ -819,7 +767,6 @@ func (p *Parser) parseUnary() ast.Expression {
 		}
 	}
 
-	// Логическое отрицание
 	if p.current.Type == token.NOT_EQ {
 		tok := p.current
 		operator := tok.Lexeme
@@ -835,22 +782,20 @@ func (p *Parser) parseUnary() ast.Expression {
 	return p.parseCall()
 }
 
-// parseCall парсит вызов функции и доступ к полям структур
 func (p *Parser) parseCall() ast.Expression {
 	expr := p.parsePrimary()
 
 	for p.current.Type == token.LPAREN || p.current.Type == token.DOT {
 		if p.current.Type == token.LPAREN {
-			// Вызов функции
 			tok := p.current
-			p.nextToken() // потребляем '('
+			p.nextToken()
 			args := []ast.Expression{}
 
-			// Парсим аргументы, если они есть
 			if p.current.Type != token.RPAREN {
 				args = append(args, p.parseExpression())
+
 				for p.current.Type == token.COMMA {
-					p.nextToken() // потребляем ','
+					p.nextToken()
 					args = append(args, p.parseExpression())
 				}
 			}
@@ -865,11 +810,8 @@ func (p *Parser) parseCall() ast.Expression {
 				Arguments: args,
 			}
 		} else if p.current.Type == token.DOT {
-			// Доступ к полю структуры
-			p.nextToken() // потребляем '.'
+			p.nextToken()
 			if p.current.Type == token.IDENTIFIER {
-				// Создаем выражение доступа к полю
-				// Пока просто возвращаем идентификатор, в будущем будет MemberAccess
 				field := &ast.Identifier{
 					Token: p.current,
 					Value: p.current.Lexeme,
@@ -883,7 +825,6 @@ func (p *Parser) parseCall() ast.Expression {
 	return expr
 }
 
-// parsePrimary парсит первичные выражения
 func (p *Parser) parsePrimary() ast.Expression {
 	switch p.current.Type {
 	case token.IDENTIFIER:
@@ -933,8 +874,12 @@ func (p *Parser) parsePrimary() ast.Expression {
 		}
 		p.nextToken()
 		return lit
+	case token.ILLEGAL:
+		p.addError(p.current.Lexeme)
+		p.nextToken()
+		return nil
 	case token.LPAREN:
-		p.nextToken() // потребляем '('
+		p.nextToken()
 		expr := p.parseExpression()
 		if !p.expect(token.RPAREN) {
 			return nil
@@ -947,7 +892,6 @@ func (p *Parser) parsePrimary() ast.Expression {
 	}
 }
 
-// parseType парсит тип
 func (p *Parser) parseType() ast.Type {
 	switch p.current.Type {
 	case token.KW_INT:
@@ -967,7 +911,6 @@ func (p *Parser) parseType() ast.Type {
 		p.nextToken()
 		return t
 	case token.IDENTIFIER:
-		// Пользовательский тип (struct)
 		t := ast.Type{Token: p.current, Kind: "identifier", Name: p.current.Lexeme}
 		p.nextToken()
 		return t

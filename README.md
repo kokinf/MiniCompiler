@@ -1,6 +1,6 @@
 # MiniCompiler
 
-Простой компилятор для языка программирования, C-подобного, реализованный на Go.
+Простой компилятор для C-подобного языка программирования, реализованный на Go. Проект включает лексический, синтаксический и семантический анализ.
 
 ## Инструкции по сборке
 
@@ -20,7 +20,7 @@ cd MiniCompiler
 make build
 
 # Сборка для Windows
-go build -o bin/compiler.exe ./cmd/compiler
+go build -o bin/compiler.exe ./src/cmd/compiler
 ```
 
 ## Использование
@@ -65,6 +65,7 @@ go build -o bin/compiler.exe ./cmd/compiler
 
 # Генерация DOT графа для визуализации
 ./bin/compiler parse --input examples/factorial.src --format dot --output ast.dot
+dot -Tpng ast.dot -o ast.png
 
 # Генерация JSON для машинной обработки
 ./bin/compiler parse --input examples/struct.src --format json --output ast.json
@@ -93,12 +94,58 @@ Program:
       Return
 ```
 
-## Тесты
+### 3. Семантический анализ (проверка типов и областей видимости)
+
+```bash
+# Базовый семантический анализ
+./bin/compiler check --input examples/factorial.src
+
+# Подробный вывод с таблицей символов
+./bin/compiler check --input examples/factorial.src --verbose
+
+# Вывод с аннотациями типов выражений
+./bin/compiler check --input examples/factorial.src --show-types
+
+# Вывод таблицы символов
+./bin/compiler symbols --input examples/factorial.src
+
+# Вывод таблицы символов в JSON
+./bin/compiler symbols --input examples/factorial.src --format json
+```
+
+**Пример вывода таблицы символов:**
+```
+Symbol Table:
+global scope (level 0):
+  factorial: function function -> int (line 1)
+  main: function function -> int (line 8)
+```
+
+**Пример вывода семантических ошибок:**
+```
+type_mismatch: cannot assign float to int
+  --> line 2, column 9
+  |
+  = in function main
+  = cannot assign float to int
+```
+
+## Тестирование
 
 ### Запуск всех тестов
 
 ```bash
 make test
+```
+
+### Запуск отдельных категорий тестов
+
+```bash
+make test-lexer      # Только тесты лексера
+make test-parser     # Только тесты парсера
+make test-semantic   # Только семантические тесты
+make test-valid      # Только валидные тесты
+make test-invalid    # Только тесты с ошибками
 ```
 
 ## Валидные тесты лексера
@@ -176,7 +223,84 @@ make test
 | **missing_ident** | Пропущено имя переменной | `ожидалось имя переменной, получен ASSIGN` |
 | **invalid_assignment** | Присваивание литералу | `левая часть присваивания должна быть идентификатором` |
 | **missing_type** | Объявление переменной без типа | `объявление переменной должно содержать тип` |
-| **unclosed_string** | Незакрытый строковый литерал | `Ошибка в L:C: незакрытый строковый литерал` |
+
+## Валидные тесты семантического анализа
+
+### Совместимость типов (`tests/semantic/valid/type_compatibility/`)
+
+| Тест | Описание |
+|------|----------|
+| **int_ops** | Операции с целыми числами |
+| **float_ops** | Операции с числами с плавающей точкой |
+| **mixed_ops** | Смешанные операции (int + float) |
+| **comparisons** | Операции сравнения между типами |
+
+### Области видимости (`tests/semantic/valid/nested_scopes/`)
+
+| Тест | Описание |
+|------|----------|
+| **block** | Вложенные блоки и локальные переменные |
+| **shadow** | Затенение переменных |
+| **if_scope** | Области видимости в условных конструкциях |
+| **while_scope** | Области видимости в циклах |
+
+### Сложные программы (`tests/semantic/valid/complex_programs/`)
+
+| Тест | Описание |
+|------|----------|
+| **factorial** | Рекурсивная функция с проверкой типов |
+| **fibonacci** | Двойная рекурсия с проверкой возврата |
+| **nested_calls** | Вложенные вызовы функций |
+
+## Невалидные тесты семантического анализа
+
+### Необъявленные переменные (`tests/semantic/invalid/undeclared_variable/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **simple** | Использование необъявленной переменной | `identifier 'x' not declared` |
+| **in_expr** | Необъявленная переменная в выражении | `identifier 'unknown' not declared` |
+| **func_call** | Вызов необъявленной функции | `identifier 'unknown_func' not declared` |
+
+### Несовместимость типов (`tests/semantic/invalid/type_mismatch/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **float_to_int** | Присваивание float в int | `cannot assign float to int` |
+| **bool_to_int** | Присваивание bool в int | `cannot assign bool to int` |
+| **string_to_int** | Присваивание string в int | `cannot assign string to int` |
+| **bool_arithmetic** | bool в арифметической операции | `operator + requires numeric operands` |
+| **if_condition** | Неbool условие в if | `if condition must be bool` |
+| **while_condition** | Неbool условие в while | `while condition must be bool` |
+
+### Дублирование объявлений (`tests/semantic/invalid/duplicate_declaration/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **variable** | Повторное объявление переменной | `variable 'x' already declared` |
+| **function** | Повторное объявление функции | `function 'foo' already declared` |
+
+### Ошибки аргументов (`tests/semantic/invalid/argument_errors/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **count** | Неправильное количество аргументов | `expected 2 arguments, got 1` |
+| **type** | Неправильный тип аргумента | `argument 2: expected int, got float` |
+| **call_non_func** | Вызов не функции | `'x' is not a function` |
+
+### Ошибки области видимости (`tests/semantic/invalid/scope_errors/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **after_scope** | Использование переменной после блока | `identifier 'x' not declared` |
+
+### Ошибки возврата (`tests/semantic/invalid/return_errors/`)
+
+| Тест | Описание | Ожидаемая ошибка |
+|------|----------|------------------|
+| **missing_return** | Отсутствие return в не-void функции | `function must return a value` |
+| **return_in_void** | Возврат значения из void функции | `cannot return int, expected void` |
+| **return_type** | Неправильный тип возврата | `cannot return float, expected int` |
 
 ## Примеры программ
 
@@ -249,11 +373,21 @@ fn area(rect Rectangle) -> int {
 | Категория | Токены/Конструкции |
 |-----------|-------------------|
 | **Ключевые слова** | `fn`, `int`, `float`, `bool`, `string`, `if`, `else`, `while`, `for`, `return`, `true`, `false`, `void`, `struct` |
-| **Операторы** | `+`, `-`, `*`, `/`, `%`, `=`, `+=`, `-=`, `*=`, `/=`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `||`, `!` |
+| **Операторы** | `+`, `-`, `*`, `/`, `%`, `=`, `+=`, `-=`, `*=`, `/=`, `==`, `!=`, `<`, `<=`, `>`, `>=`, `&&`, `\|\|`, `!` |
 | **Разделители** | `()`, `{}`, `[]`, `;`, `,`, `.`, `->` |
 | **Типы данных** | `int`, `float`, `bool`, `string`, `void`, пользовательские структуры |
 | **Литералы** | Целые числа (32-bit), числа с плавающей точкой, строки, булевы значения |
 | **Комментарии** | Однострочные (`//`), многострочные (`/* */`) с поддержкой вложенности |
+
+### Правила семантического анализа
+
+| Проверка | Описание |
+|----------|----------|
+| **Совместимость типов** | `int` может быть неявно преобразован в `float`, обратное требует явного приведения |
+| **Области видимости** | Поддержка глобальной, функциональной и блочной областей видимости |
+| **Проверка возврата** | Не-void функции должны иметь `return` во всех ветках |
+| **Проверка аргументов** | Количество и типы аргументов должны соответствовать объявлению функции |
+| **Условия** | Выражения в `if` и `while` должны иметь тип `bool` |
 
 ## Структура проекта
 
@@ -261,43 +395,62 @@ fn area(rect Rectangle) -> int {
 mikrocompiler/
 ├── cmd/
 │   └── compiler/
-│       └── main.go
+│       └── main.go                      # Точка входа
 ├── internal/
 │   ├── ast/
-│   │   ├── ast.go                  # Определения узлов AST
-│   │   ├── printer.go               # Pretty printer для AST
-│   │   ├── dot_printer.go           # Генератор DOT графов
-│   │   └── json_printer.go          # Генератор JSON
+│   │   ├── ast.go                       # Определения узлов AST
+│   │   ├── printer.go                   # Pretty printer для AST
+│   │   ├── dot_printer.go               # Генератор DOT графов
+│   │   └── json_printer.go              # Генератор JSON
 │   ├── lexer/
-│   │   └── scanner.go               # Лексический анализатор
+│   │   └── scanner.go                   # Лексический анализатор
 │   ├── parser/
-│   │   └── parser.go                # Синтаксический анализатор
+│   │   └── parser.go                    # Синтаксический анализатор
+│   ├── semantic/
+│   │   ├── analyzer.go                  # Семантический анализатор
+│   │   ├── symbol_table.go              # Таблица символов
+│   │   ├── type_system.go               # Система типов
+│   │   ├── errors.go                    # Ошибки семантики
+│   │   └── types.go                     # Определения типов
 │   └── token/
-│       └── token.go                 # Определения токенов
+│       └── token.go                     # Определения токенов
 ├── tests/
 │   ├── lexer/
-│   │   ├── valid/                    # Валидные тесты лексера
-│   │   └── invalid/                  # Тесты с ошибками лексера
+│   │   ├── valid/                       # Валидные тесты лексера
+│   │   └── invalid/                     # Тесты с ошибками лексера
 │   ├── parser/
-│   │   ├── valid/                     # Валидные тесты парсера
+│   │   ├── valid/                       # Валидные тесты парсера
 │   │   │   ├── expressions/
 │   │   │   ├── statements/
 │   │   │   ├── declarations/
 │   │   │   └── full_programs/
-│   │   └── invalid/                   # Тесты с ошибками парсера
+│   │   └── invalid/                     # Тесты с ошибками парсера
 │   │       ├── syntax_errors/
+│   ├── semantic/
+│   │   ├── valid/                       # Валидные семантические тесты
+│   │   │   ├── type_compatibility/
+│   │   │   ├── function_overloading/
+│   │   │   ├── nested_scopes/
+│   │   │   └── complex_programs/
+│   │   └── invalid/                     # Семантические ошибки
+│   │       ├── undeclared_variable/
+│   │       ├── type_mismatch/
+│   │       ├── duplicate_declaration/
+│   │       ├── argument_errors/
+│   │       ├── scope_errors/
+│   │       └── return_errors/
 │   └── test_runner/
-│       └── run_tests.sh               # Скрипт запуска тестов
+│       └── run_tests.sh                 # Скрипт запуска тестов
 ├── examples/
-│   ├── hello.src                      # Пример с базовыми конструкциями
-│   ├── factorial.src                   # Пример с рекурсией
-│   └── struct.src                      # Пример со структурами
+│   ├── hello.src                        # Пример с базовыми конструкциями
+│   ├── factorial.src                    # Пример с рекурсией
+│   └── struct.src                       # Пример со структурами
 ├── docs/
-│   ├── language_spec.md                # Лексическая спецификация
-│   └── grammar.md                      # Грамматика языка
+│   ├── language_spec.md                 # Лексическая спецификация
+│   └── grammar.md                       # Грамматика языка
 ├── Makefile                             # Автоматизация сборки
-├── go.mod                               # Определение модуля Go
-└── README.md                            # Этот файл
+├── go.mod
+└── README.md
 ```
 
 ## Makefile
@@ -307,7 +460,13 @@ mikrocompiler/
 | `make build` | Сборка компилятора |
 | `make run` | Запуск парсера на `examples/factorial.src` |
 | `make run-lex` | Запуск лексера на `examples/hello.src` |
+| `make check` | Семантический анализ на `examples/factorial.src` |
+| `make symbols` | Вывод таблицы символов для примера |
 | `make test` | Запуск всех тестов |
+| `make test-lexer` | Только тесты лексера |
+| `make test-parser` | Только тесты парсера |
+| `make test-semantic` | Только семантические тесты |
+| `make generate-ast-png` | Генерация PNG изображения AST |
 | `make clean` | Очистка артефактов сборки |
 | `make fmt` | Форматирование кода |
 | `make help` | Показать все доступные команды |

@@ -1,0 +1,12 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+=== Ошибки семантического анализа ===
+invalid_condition: if condition must be bool, got int
+  --> line 3, column 5
+  |
+  = in function main
+  = if condition must be bool, got int
+

@@ -1,0 +1,12 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+=== Ошибки семантического анализа ===
+type_mismatch: cannot assign string to int
+  --> line 2, column 5
+  |
+  = in function main
+  = cannot assign string to int
+

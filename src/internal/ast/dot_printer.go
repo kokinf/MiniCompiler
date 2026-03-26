@@ -85,6 +85,39 @@ func (p *DOTPrinter) printNode(node Node) int {
 			initID := p.printExpression(n.Initializer)
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"init\"];\n", id, initID))
 		}
+
+	case *ForStmt:
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"For\", fillcolor=lightcoral];\n", id))
+
+		if n.Init != nil {
+			initID := p.printStatement(n.Init)
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"init\"];\n", id, initID))
+		} else {
+			emptyID := p.nextID()
+			p.output.WriteString(fmt.Sprintf("  node%d [label=\"<empty>\", shape=box, fillcolor=lightgray];\n", emptyID))
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"init\"];\n", id, emptyID))
+		}
+
+		if n.Condition != nil {
+			condID := p.printExpression(n.Condition)
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"cond\"];\n", id, condID))
+		} else {
+			emptyID := p.nextID()
+			p.output.WriteString(fmt.Sprintf("  node%d [label=\"<empty>\", shape=box, fillcolor=lightgray];\n", emptyID))
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"cond\"];\n", id, emptyID))
+		}
+
+		if n.Update != nil {
+			updateID := p.printExpression(n.Update)
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"update\"];\n", id, updateID))
+		} else {
+			emptyID := p.nextID()
+			p.output.WriteString(fmt.Sprintf("  node%d [label=\"<empty>\", shape=box, fillcolor=lightgray];\n", emptyID))
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"update\"];\n", id, emptyID))
+		}
+
+		bodyID := p.printBlockStmt(n.Body)
+		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"body\"];\n", id, bodyID))
 	}
 
 	return id
@@ -130,6 +163,9 @@ func (p *DOTPrinter) printStatement(stmt Statement) int {
 
 		bodyID := p.printBlockStmt(s.Body)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"body\"];\n", id, bodyID))
+
+	case *ForStmt:
+		return p.printNode(s)
 
 	case *ReturnStmt:
 		label := "Return"

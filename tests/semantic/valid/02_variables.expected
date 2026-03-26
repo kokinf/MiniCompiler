@@ -1,0 +1,4 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+

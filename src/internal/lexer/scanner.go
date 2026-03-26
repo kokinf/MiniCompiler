@@ -78,7 +78,6 @@ func (s *Scanner) NextToken() token.Token {
 	line, column := s.line, s.column
 
 	switch s.ch {
-	// Сначала проверяем двухсимвольные операторы
 	case '-':
 		if s.peekChar() == '>' {
 			s.readChar() // потребляем '-'
@@ -379,36 +378,6 @@ func (s *Scanner) skipMultiLineComment() {
 			s.readChar()
 		}
 	}
-}
-
-func (s *Scanner) PeekToken() token.Token {
-	position := s.position
-	readPosition := s.readPosition
-	ch := s.ch
-	line := s.line
-	column := s.column
-
-	tok := s.NextToken()
-
-	s.position = position
-	s.readPosition = readPosition
-	s.ch = ch
-	s.line = line
-	s.column = column
-
-	return tok
-}
-
-func (s *Scanner) IsAtEnd() bool {
-	return s.position >= len(s.input)
-}
-
-func (s *Scanner) GetLine() int {
-	return s.line
-}
-
-func (s *Scanner) GetColumn() int {
-	return s.column
 }
 
 func (s *Scanner) newIllegalToken(message string, line, column int) token.Token {

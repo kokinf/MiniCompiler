@@ -1,0 +1,10 @@
+fn sum_recursive(n int) -> int {
+    if (n <= 0) {
+        return 0;
+    }
+    return n + sum_recursive(n - 1);
+}
+
+fn main() -> int {
+    return sum_recursive(5);
+}

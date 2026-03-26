@@ -1,0 +1,12 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+=== Ошибки семантического анализа ===
+invalid_return: function 'main' must return a value of type int
+  --> line 1, column 1
+  |
+  = in function main
+  = function 'main' must return a value of type int
+

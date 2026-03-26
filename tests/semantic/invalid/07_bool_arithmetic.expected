@@ -1,0 +1,12 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+=== Ошибки семантического анализа ===
+invalid_binary_operator: operator + requires numeric operands, got int and bool
+  --> line 2, column 15
+  |
+  = in function main
+  = operator + requires numeric operands, got int and bool
+

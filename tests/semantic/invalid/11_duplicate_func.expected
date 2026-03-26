@@ -1,0 +1,13 @@
+Symbol Table:
+global scope (level 0):
+  foo: function function -> int (line 1)
+  main: function function -> int (line 9)
+
+
+=== Ошибки семантического анализа ===
+duplicate_declaration: function 'foo' already declared at line 1
+  --> line 5, column 1
+  |
+  = in global
+  = function 'foo' already declared at line 1
+

@@ -1,0 +1,12 @@
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+=== Ошибки семантического анализа ===
+undeclared_identifier: identifier 'x' not declared
+  --> line 5, column 12
+  |
+  = in function main
+  = identifier 'x' not declared
+
