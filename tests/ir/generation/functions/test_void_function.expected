@@ -1,0 +1,15 @@
+function printValue: void (int x)
+  ; Locals:
+  ;   x: int (offset 8, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; param x: int
+  STORE [%t1], x
+  RETURN
+
+function main: int ()
+
+entry:
+  PARAM 0, 42
+  %t1 = CALL printValue(42)
+  RETURN 0

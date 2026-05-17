@@ -1,6 +1,7 @@
+
 # MiniCompiler
 
-Простой компилятор для C-подобного языка программирования, реализованный на Go. Проект включает лексический, синтаксический и семантический анализ.
+Простой компилятор для C-подобного языка программирования, реализованный на Go. Проект включает лексический, синтаксический, семантический анализ и генерацию промежуточного представления (IR)
 
 ## Инструкции по сборке
 
@@ -17,7 +18,7 @@ git clone https://github.com/kokinf/MiniCompiler
 cd MiniCompiler
 
 # Сборка для Linux и macOS
-make build
+make
 
 # Сборка для Windows
 go build -o bin/compiler.exe ./src/cmd/compiler
@@ -130,22 +131,106 @@ type_mismatch: cannot assign float to int
   = cannot assign float to int
 ```
 
+### 4. Генерация промежуточного представления (IR)
+
+```bash
+# Генерация IR в текстовом формате
+./bin/compiler ir --input examples/factorial.src
+
+# Генерация оптимизированного IR со статистикой
+./bin/compiler ir --input examples/factorial.src --optimize --stats
+
+# Сохранение IR в файл
+./bin/compiler ir --input examples/factorial.src --output factorial.ir
+
+# Генерация Control Flow Graph (DOT формат)
+./bin/compiler ir --input examples/factorial.src --format dot --output cfg.dot
+dot -Tpng cfg.dot -o cfg.png
+
+# Генерация IR в JSON
+./bin/compiler ir --input examples/factorial.src --format json --output ir.json
+
+# Вывод статистики IR
+./bin/compiler ir --input examples/factorial.src --stats
+```
+
+**Пример вывода IR (текстовый формат):**
+```
+function factorial: int (int n)
+  ; Locals:
+
+  entry:
+    %t1 = CMP_LE n, 1
+    JUMP_IF %t1, if_then_1
+    JUMP if_else_2
+
+  if_then_1:
+    RETURN 1
+
+  if_else_2:
+    %t2 = SUB n, 1
+    PARAM 0, %t2
+    %t3 = CALL factorial(%t2)
+    %t4 = MUL n, %t3
+    RETURN %t4
+```
+
+**Пример вывода статистики IR:**
+```
+IR Statistics:
+================
+
+Functions:       1
+Basic Blocks:    3
+Instructions:    7
+Temporaries:     4
+Phi Nodes:       0
+Def-Use Chains:  4
+
+Instruction breakdown:
+  CMP_LE     : 1
+  JUMP_IF    : 1
+  JUMP       : 1
+  RETURN     : 2
+  SUB        : 1
+  PARAM      : 1
+  CALL       : 1
+  MUL        : 1
+```
+
+**Пример оптимизации IR:**
+```
+# До оптимизации:
+  %t1 = ADD x, 0
+  %t2 = MUL %t1, 1
+  %t3 = CMP_GT %t2, 5
+  JUMP_IF %t3, L1
+  JUMP L2
+
+# После оптимизации:
+  %t1 = CMP_GT x, 5    # x + 0 → x, x * 1 → x
+  JUMP_IF %t1, L1
+  JUMP L2
+```
+
+#### Оптимизации IR
+
+Компилятор поддерживает следующие оптимизации:
+
+| Оптимизация | Описание | Пример |
+|-------------|----------|--------|
+| **Алгебраические упрощения** | Удаление тривиальных операций | `x + 0 → x`, `x * 1 → x` |
+| **Свёртка констант** | Вычисление константных выражений | `3 + 4 → 7` |
+| **Strength reduction** | Замена дорогих операций | `x * 2 → x + x` |
+| **Dead code elimination** | Удаление неиспользуемого кода | `MOVE x, x → удалить` |
+| **Jump chaining** | Упрощение цепочек переходов | `JUMP L1; L1: JUMP L2 → JUMP L2` |
+
 ## Тестирование
 
 ### Запуск всех тестов
 
 ```bash
 make test
-```
-
-### Запуск отдельных категорий тестов
-
-```bash
-make test-lexer      # Только тесты лексера
-make test-parser     # Только тесты парсера
-make test-semantic   # Только семантические тесты
-make test-valid      # Только валидные тесты
-make test-invalid    # Только тесты с ошибками
 ```
 
 ## Валидные тесты лексера
@@ -226,81 +311,86 @@ make test-invalid    # Только тесты с ошибками
 
 ## Валидные тесты семантического анализа
 
-### Совместимость типов (`tests/semantic/valid/type_compatibility/`)
+### Совместимость типов (`tests/semantic/valid/`)
 
 | Тест | Описание |
 |------|----------|
-| **int_ops** | Операции с целыми числами |
-| **float_ops** | Операции с числами с плавающей точкой |
-| **mixed_ops** | Смешанные операции (int + float) |
-| **comparisons** | Операции сравнения между типами |
-
-### Области видимости (`tests/semantic/valid/nested_scopes/`)
-
-| Тест | Описание |
-|------|----------|
-| **block** | Вложенные блоки и локальные переменные |
-| **shadow** | Затенение переменных |
-| **if_scope** | Области видимости в условных конструкциях |
-| **while_scope** | Области видимости в циклах |
-
-### Сложные программы (`tests/semantic/valid/complex_programs/`)
-
-| Тест | Описание |
-|------|----------|
-| **factorial** | Рекурсивная функция с проверкой типов |
-| **fibonacci** | Двойная рекурсия с проверкой возврата |
-| **nested_calls** | Вложенные вызовы функций |
+| **01_simple** | Простая программа с возвратом значения |
+| **02_variables** | Объявление и использование переменных |
+| **03_arithmetic** | Арифметические операции с int |
+| **04_float** | Операции с float и преобразование типов |
+| **05_logical** | Логические операции с bool |
+| **06_comparisons** | Операции сравнения |
+| **07_mixed** | Смешанные операции (int + float) |
+| **08_if_else** | Условные конструкции с возвратом |
+| **09_recursion** | Рекурсивная функция |
+| **11_call** | Вызов функции с аргументами |
+| **12_factorial** | Полная программа с факториалом |
+| **13_fibonacci** | Полная программа с числами Фибоначчи |
 
 ## Невалидные тесты семантического анализа
 
-### Необъявленные переменные (`tests/semantic/invalid/undeclared_variable/`)
+Расположены в: `tests/semantic/invalid/`
 
 | Тест | Описание | Ожидаемая ошибка |
 |------|----------|------------------|
-| **simple** | Использование необъявленной переменной | `identifier 'x' not declared` |
-| **in_expr** | Необъявленная переменная в выражении | `identifier 'unknown' not declared` |
-| **func_call** | Вызов необъявленной функции | `identifier 'unknown_func' not declared` |
+| **01_undeclared_var** | Использование необъявленной переменной | `identifier 'x' not declared` |
+| **02_undeclared_expr** | Необъявленная переменная в выражении | `identifier 'unknown' not declared` |
+| **03_undeclared_func** | Вызов необъявленной функции | `identifier 'unknown_func' not declared` |
+| **04_float_to_int** | Присваивание float в int | `cannot assign float to int` |
+| **05_bool_to_int** | Присваивание bool в int | `cannot assign bool to int` |
+| **06_string_to_int** | Присваивание string в int | `cannot assign string to int` |
+| **07_bool_arithmetic** | bool в арифметической операции | `operator + requires numeric operands` |
+| **08_if_condition** | Неbool условие в if | `if condition must be bool` |
+| **09_while_condition** | Неbool условие в while | `while condition must be bool` |
+| **10_duplicate_var** | Повторное объявление переменной | `variable 'x' already declared` |
+| **11_duplicate_func** | Повторное объявление функции | `function 'foo' already declared` |
+| **12_arg_count** | Неправильное количество аргументов | `expected 2 arguments, got 1` |
+| **13_arg_type** | Неправильный тип аргумента | `argument 2: expected int, got float` |
+| **14_call_non_func** | Вызов не функции | `'x' is not a function` |
+| **15_return_type** | Неправильный тип возврата | `cannot return float, expected int` |
+| **16_return_in_void** | Возврат значения из void функции | `cannot return int, expected void` |
+| **17_missing_return** | Отсутствие return в не-void функции | `function must return a value` |
+| **18_scope** | Использование переменной после блока | `identifier 'x' not declared` |
 
-### Несовместимость типов (`tests/semantic/invalid/type_mismatch/`)
+## IR тесты
 
-| Тест | Описание | Ожидаемая ошибка |
-|------|----------|------------------|
-| **float_to_int** | Присваивание float в int | `cannot assign float to int` |
-| **bool_to_int** | Присваивание bool в int | `cannot assign bool to int` |
-| **string_to_int** | Присваивание string в int | `cannot assign string to int` |
-| **bool_arithmetic** | bool в арифметической операции | `operator + requires numeric operands` |
-| **if_condition** | Неbool условие в if | `if condition must be bool` |
-| **while_condition** | Неbool условие в while | `while condition must be bool` |
+Расположены в: `tests/ir/`
 
-### Дублирование объявлений (`tests/semantic/invalid/duplicate_declaration/`)
+### Генерация (`tests/ir/generation/`)
 
-| Тест | Описание | Ожидаемая ошибка |
-|------|----------|------------------|
-| **variable** | Повторное объявление переменной | `variable 'x' already declared` |
-| **function** | Повторное объявление функции | `function 'foo' already declared` |
+| Категория | Тест | Описание |
+|-----------|------|----------|
+| **expressions** | test_arithmetic | Арифметические выражения |
+| | test_comparison | Операторы сравнения |
+| | test_literals | Литералы разных типов |
+| | test_logical | Логические операции |
+| | test_unary | Унарные операции |
+| **control_flow** | test_simple_if | Условный оператор if |
+| | test_if_else | If-else конструкция |
+| | test_nested_if | Вложенные условия |
+| | test_while_loop | Цикл while |
+| | test_for_loop | Цикл for |
+| | test_empty_for | Бесконечный цикл for |
+| **functions** | test_simple_call | Вызов функции |
+| | test_recursive | Рекурсивная функция |
+| | test_multiple_params | Функция с параметрами |
+| | test_void_function | Void-функция |
+| **integration** | test_factorial | Факториал |
+| | test_fibonacci | Числа Фибоначчи |
+| | test_gcd | Алгоритм Евклида |
+| | test_prime | Проверка на простоту |
 
-### Ошибки аргументов (`tests/semantic/invalid/argument_errors/`)
+### Валидация (`tests/ir/validation/`)
 
-| Тест | Описание | Ожидаемая ошибка |
-|------|----------|------------------|
-| **count** | Неправильное количество аргументов | `expected 2 arguments, got 1` |
-| **type** | Неправильный тип аргумента | `argument 2: expected int, got float` |
-| **call_non_func** | Вызов не функции | `'x' is not a function` |
-
-### Ошибки области видимости (`tests/semantic/invalid/scope_errors/`)
-
-| Тест | Описание | Ожидаемая ошибка |
-|------|----------|------------------|
-| **after_scope** | Использование переменной после блока | `identifier 'x' not declared` |
-
-### Ошибки возврата (`tests/semantic/invalid/return_errors/`)
-
-| Тест | Описание | Ожидаемая ошибка |
-|------|----------|------------------|
-| **missing_return** | Отсутствие return в не-void функции | `function must return a value` |
-| **return_in_void** | Возврат значения из void функции | `cannot return int, expected void` |
-| **return_type** | Неправильный тип возврата | `cannot return float, expected int` |
+| Категория | Тест | Описание |
+|-----------|------|----------|
+| **structural** | test_empty_function | Пустая функция |
+| | test_multiple_returns | Множественные возвраты |
+| | test_nested_blocks | Вложенные блоки |
+| **type_consistency** | test_mixed_types | Смешанные типы |
+| **optimization** | test_algebraic | Алгебраические упрощения |
+| | test_constant_folding | Свёртка констант |
 
 ## Примеры программ
 
@@ -389,6 +479,18 @@ fn area(rect Rectangle) -> int {
 | **Проверка аргументов** | Количество и типы аргументов должны соответствовать объявлению функции |
 | **Условия** | Выражения в `if` и `while` должны иметь тип `bool` |
 
+### IR инструкции
+
+| Категория | Инструкции |
+|-----------|-----------|
+| **Арифметические** | `ADD`, `SUB`, `MUL`, `DIV`, `MOD`, `NEG` |
+| **Логические** | `AND`, `OR`, `NOT`, `XOR` |
+| **Сравнения** | `CMP_EQ`, `CMP_NE`, `CMP_LT`, `CMP_LE`, `CMP_GT`, `CMP_GE` |
+| **Память** | `LOAD`, `STORE`, `ALLOCA`, `GEP` |
+| **Управление** | `JUMP`, `JUMP_IF`, `JUMP_IF_NOT`, `LABEL`, `PHI` |
+| **Функции** | `CALL`, `RETURN`, `PARAM` |
+| **Перемещение** | `MOVE` |
+
 ## Структура проекта
 
 ```
@@ -405,13 +507,25 @@ mikrocompiler/
 │   ├── lexer/
 │   │   └── scanner.go                   # Лексический анализатор
 │   ├── parser/
-│   │   └── parser.go                    # Синтаксический анализатор
+│   │   ├── parser.go                    # Синтаксический анализатор
+│   │   └── grammar.txt                  # Формальная грамматика
 │   ├── semantic/
 │   │   ├── analyzer.go                  # Семантический анализатор
 │   │   ├── symbol_table.go              # Таблица символов
 │   │   ├── type_system.go               # Система типов
 │   │   ├── errors.go                    # Ошибки семантики
-│   │   └── types.go                     # Определения типов
+│   │   ├── types.go                     # Определения типов
+│   │   └── semantic_test.go             # Unit тесты семантики
+│   ├── ir/
+│   │   ├── generator.go                 # Генератор IR
+│   │   ├── instruction.go               # IR инструкции
+│   │   ├── basic_block.go               # Базовые блоки CFG
+│   │   ├── function.go                  # Функции в IR
+│   │   ├── operand.go                   # Операнды IR
+│   │   ├── optimizer.go                 # Peephole оптимизатор
+│   │   ├── printer.go                   # Вывод IR (text/dot/json)
+│   │   ├── program.go                   # IR программа
+│   │   └── ir_test.go                   # Unit тесты IR
 │   └── token/
 │       └── token.go                     # Определения токенов
 ├── tests/
@@ -425,20 +539,20 @@ mikrocompiler/
 │   │   │   ├── declarations/
 │   │   │   └── full_programs/
 │   │   └── invalid/                     # Тесты с ошибками парсера
-│   │       ├── syntax_errors/
+│   │       └── syntax_errors/
 │   ├── semantic/
 │   │   ├── valid/                       # Валидные семантические тесты
-│   │   │   ├── type_compatibility/
-│   │   │   ├── function_overloading/
-│   │   │   ├── nested_scopes/
-│   │   │   └── complex_programs/
-│   │   └── invalid/                     # Семантические ошибки
-│   │       ├── undeclared_variable/
-│   │       ├── type_mismatch/
-│   │       ├── duplicate_declaration/
-│   │       ├── argument_errors/
-│   │       ├── scope_errors/
-│   │       └── return_errors/
+│   │   └── invalid/                     # Тесты с семантическими ошибками
+│   ├── ir/
+│   │   ├── generation/                  # Тесты генерации IR
+│   │   │   ├── expressions/
+│   │   │   ├── control_flow/
+│   │   │   ├── functions/
+│   │   │   └── integration/
+│   │   └── validation/                  # Тесты валидации IR
+│   │       ├── structural/
+│   │       ├── type_consistency/
+│   │       └── optimization/
 │   └── test_runner/
 │       └── run_tests.sh                 # Скрипт запуска тестов
 ├── examples/
@@ -460,13 +574,14 @@ mikrocompiler/
 | `make build` | Сборка компилятора |
 | `make run` | Запуск парсера на `examples/factorial.src` |
 | `make run-lex` | Запуск лексера на `examples/hello.src` |
+| `make run-parse` | Запуск парсера на `examples/struct.src` |
 | `make check` | Семантический анализ на `examples/factorial.src` |
-| `make symbols` | Вывод таблицы символов для примера |
+| `make check-types` | Семантический анализ с выводом типов |
+| `make symbols` | Вывод таблицы символов |
+| `make ir` | Генерация IR |
+| `make ir-dot` | Генерация CFG в PNG |
+| `make ir-json` | Генерация IR в JSON |
+| `make ir-stats` | Статистика IR |
 | `make test` | Запуск всех тестов |
-| `make test-lexer` | Только тесты лексера |
-| `make test-parser` | Только тесты парсера |
-| `make test-semantic` | Только семантические тесты |
-| `make generate-ast-png` | Генерация PNG изображения AST |
 | `make clean` | Очистка артефактов сборки |
-| `make fmt` | Форматирование кода |
 | `make help` | Показать все доступные команды |

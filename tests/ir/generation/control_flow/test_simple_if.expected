@@ -1,0 +1,23 @@
+function main: int ()
+  ; Locals:
+  ;   x: int (offset 0, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var x: int
+  STORE [%t1], 10
+  %t2 = LOAD [%t1]
+  %t3 = CMP_GT %t2, 5
+  JUMP_IF %t3, if_then_1
+  JUMP if_merge_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  STORE [%t1], 20
+  JUMP if_merge_2
+
+if_merge_2:
+  ; preds: entry, if_then_1
+  ; idom: entry
+  %t4 = LOAD [%t1]
+  RETURN %t4

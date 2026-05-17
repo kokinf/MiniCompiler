@@ -4,7 +4,7 @@ global scope (level 0):
   main: function function -> int (line 5)
 
 
-=== Ошибки семантического анализа ===
+ Ошибки 
 argument_count_mismatch: expected 2 arguments, got 1
   --> line 6, column 16
   |

@@ -4,25 +4,51 @@ import (
 	"mikrocompiler/src/internal/token"
 )
 
+// Node - базовый интерфейс для всех узлов AST
 type Node interface {
 	TokenLiteral() string
 	String() string
 	Line() int
 	Column() int
+	Accept(Visitor) interface{}
 }
 
-type Program struct {
-	Declarations []Declaration
+// Visitor pattern для обхода AST
+type Visitor interface {
+	VisitProgram(node *ProgramNode) interface{}
+	VisitFunctionDecl(node *FunctionDeclNode) interface{}
+	VisitStructDecl(node *StructDeclNode) interface{}
+	VisitVarDecl(node *VarDeclNode) interface{}
+	VisitBlockStmt(node *BlockStmtNode) interface{}
+	VisitIfStmt(node *IfStmtNode) interface{}
+	VisitWhileStmt(node *WhileStmtNode) interface{}
+	VisitForStmt(node *ForStmtNode) interface{}
+	VisitReturnStmt(node *ReturnStmtNode) interface{}
+	VisitExprStmt(node *ExprStmtNode) interface{}
+	VisitIdentifier(node *IdentifierNode) interface{}
+	VisitLiteralExpr(node *LiteralExprNode) interface{}
+	VisitBinaryExpr(node *BinaryExprNode) interface{}
+	VisitUnaryExpr(node *UnaryExprNode) interface{}
+	VisitCallExpr(node *CallExprNode) interface{}
+	VisitAssignmentExpr(node *AssignmentExprNode) interface{}
+	VisitParameter(node *ParameterNode) interface{}
 }
 
-func (p *Program) TokenLiteral() string {
+// ProgramNode - корневой узел программы
+type ProgramNode struct {
+	Declarations []DeclarationNode
+	LinePos      int
+	ColumnPos    int
+}
+
+func (p *ProgramNode) TokenLiteral() string {
 	if len(p.Declarations) > 0 {
 		return p.Declarations[0].TokenLiteral()
 	}
 	return ""
 }
 
-func (p *Program) String() string {
+func (p *ProgramNode) String() string {
 	var out string
 	for _, decl := range p.Declarations {
 		out += decl.String() + "\n"
@@ -30,242 +56,338 @@ func (p *Program) String() string {
 	return out
 }
 
-func (p *Program) Line() int {
-	if len(p.Declarations) > 0 {
+func (p *ProgramNode) Line() int {
+	if len(p.Declarations) > 0 && p.Declarations[0] != nil {
 		return p.Declarations[0].Line()
 	}
-	return 0
+	return p.LinePos
 }
 
-func (p *Program) Column() int {
-	if len(p.Declarations) > 0 {
+func (p *ProgramNode) Column() int {
+	if len(p.Declarations) > 0 && p.Declarations[0] != nil {
 		return p.Declarations[0].Column()
 	}
-	return 0
+	return p.ColumnPos
 }
 
-type Declaration interface {
+func (p *ProgramNode) Accept(v Visitor) interface{} {
+	return v.VisitProgram(p)
+}
+
+// DeclarationNode интерфейс для объявлений
+type DeclarationNode interface {
 	Node
 	declarationNode()
 }
 
-type Statement interface {
+// StatementNode интерфейс для операторов
+type StatementNode interface {
 	Node
 	statementNode()
 }
 
-type Expression interface {
+// ExpressionNode интерфейс для выражений
+type ExpressionNode interface {
 	Node
 	expressionNode()
+	Type() *TypeAnnotation
+	SetType(*TypeAnnotation)
 }
 
-type FunctionDecl struct {
+// TypeAnnotation аннотация типа для выражений
+type TypeAnnotation struct {
+	Kind string
+	Name string
+}
+
+// FunctionDeclNode объявление функции
+type FunctionDeclNode struct {
 	Token      token.Token
-	Name       *Identifier
-	Parameters []*Parameter
-	ReturnType Type
-	Body       *BlockStmt
+	Name       *IdentifierNode
+	Parameters []*ParameterNode
+	ReturnType *TypeNode
+	Body       *BlockStmtNode
 }
 
-func (fd *FunctionDecl) declarationNode()     {}
-func (fd *FunctionDecl) TokenLiteral() string { return fd.Token.Lexeme }
-func (fd *FunctionDecl) String() string       { return "FunctionDecl" }
-func (fd *FunctionDecl) Line() int            { return fd.Token.Line }
-func (fd *FunctionDecl) Column() int          { return fd.Token.Column }
-
-type StructDecl struct {
-	Token  token.Token
-	Name   *Identifier
-	Fields []*VarDecl
+func (fd *FunctionDeclNode) declarationNode()     {}
+func (fd *FunctionDeclNode) TokenLiteral() string { return fd.Token.Lexeme }
+func (fd *FunctionDeclNode) String() string       { return "FunctionDecl" }
+func (fd *FunctionDeclNode) Line() int            { return fd.Token.Line }
+func (fd *FunctionDeclNode) Column() int          { return fd.Token.Column }
+func (fd *FunctionDeclNode) Accept(v Visitor) interface{} {
+	return v.VisitFunctionDecl(fd)
 }
 
-func (sd *StructDecl) declarationNode()     {}
-func (sd *StructDecl) TokenLiteral() string { return sd.Token.Lexeme }
-func (sd *StructDecl) String() string       { return "StructDecl" }
-func (sd *StructDecl) Line() int            { return sd.Token.Line }
-func (sd *StructDecl) Column() int          { return sd.Token.Column }
-
-type VarDecl struct {
-	Token       token.Token
-	Type        Type
-	Name        *Identifier
-	Initializer Expression
-}
-
-func (vd *VarDecl) declarationNode()     {}
-func (vd *VarDecl) statementNode()       {}
-func (vd *VarDecl) TokenLiteral() string { return vd.Token.Lexeme }
-func (vd *VarDecl) String() string       { return "VarDecl" }
-func (vd *VarDecl) Line() int            { return vd.Token.Line }
-func (vd *VarDecl) Column() int          { return vd.Token.Column }
-
-type BlockStmt struct {
-	Token      token.Token
-	Statements []Statement
-}
-
-func (bs *BlockStmt) statementNode()       {}
-func (bs *BlockStmt) TokenLiteral() string { return bs.Token.Lexeme }
-func (bs *BlockStmt) String() string       { return "BlockStmt" }
-func (bs *BlockStmt) Line() int            { return bs.Token.Line }
-func (bs *BlockStmt) Column() int          { return bs.Token.Column }
-
-type IfStmt struct {
-	Token       token.Token
-	Condition   Expression
-	Consequence *BlockStmt
-	Alternative Statement
-}
-
-func (is *IfStmt) statementNode()       {}
-func (is *IfStmt) TokenLiteral() string { return is.Token.Lexeme }
-func (is *IfStmt) String() string       { return "IfStmt" }
-func (is *IfStmt) Line() int            { return is.Token.Line }
-func (is *IfStmt) Column() int          { return is.Token.Column }
-
-type WhileStmt struct {
-	Token     token.Token
-	Condition Expression
-	Body      *BlockStmt
-}
-
-func (ws *WhileStmt) statementNode()       {}
-func (ws *WhileStmt) TokenLiteral() string { return ws.Token.Lexeme }
-func (ws *WhileStmt) String() string       { return "WhileStmt" }
-func (ws *WhileStmt) Line() int            { return ws.Token.Line }
-func (ws *WhileStmt) Column() int          { return ws.Token.Column }
-
-type ForStmt struct {
-	Token     token.Token
-	Init      Statement
-	Condition Expression
-	Update    Expression
-	Body      *BlockStmt
-}
-
-func (fs *ForStmt) statementNode()       {}
-func (fs *ForStmt) TokenLiteral() string { return fs.Token.Lexeme }
-func (fs *ForStmt) String() string       { return "ForStmt" }
-func (fs *ForStmt) Line() int            { return fs.Token.Line }
-func (fs *ForStmt) Column() int          { return fs.Token.Column }
-
-type ReturnStmt struct {
-	Token    token.Token
-	RetValue Expression
-}
-
-func (rs *ReturnStmt) statementNode()       {}
-func (rs *ReturnStmt) TokenLiteral() string { return rs.Token.Lexeme }
-func (rs *ReturnStmt) String() string       { return "ReturnStmt" }
-func (rs *ReturnStmt) Line() int            { return rs.Token.Line }
-func (rs *ReturnStmt) Column() int          { return rs.Token.Column }
-
-type ExprStmt struct {
-	Token      token.Token
-	Expression Expression
-}
-
-func (es *ExprStmt) statementNode()       {}
-func (es *ExprStmt) TokenLiteral() string { return es.Token.Lexeme }
-func (es *ExprStmt) String() string       { return "ExprStmt" }
-func (es *ExprStmt) Line() int            { return es.Token.Line }
-func (es *ExprStmt) Column() int          { return es.Token.Column }
-
-type Identifier struct {
+// ParameterNode параметр функции
+type ParameterNode struct {
 	Token token.Token
-	Value string
+	Type  *TypeNode
+	Name  *IdentifierNode
 }
 
-func (i *Identifier) expressionNode()      {}
-func (i *Identifier) TokenLiteral() string { return i.Token.Lexeme }
-func (i *Identifier) String() string       { return i.Value }
-func (i *Identifier) Line() int            { return i.Token.Line }
-func (i *Identifier) Column() int          { return i.Token.Column }
+func (p *ParameterNode) TokenLiteral() string { return p.Token.Lexeme }
+func (p *ParameterNode) String() string       { return p.Type.String() + " " + p.Name.String() }
+func (p *ParameterNode) Line() int            { return p.Token.Line }
+func (p *ParameterNode) Column() int          { return p.Token.Column }
+func (p *ParameterNode) Accept(v Visitor) interface{} {
+	return v.VisitParameter(p)
+}
 
-type LiteralExpr struct {
+// StructDeclNode объявление структуры
+type StructDeclNode struct {
+	Token  token.Token
+	Name   *IdentifierNode
+	Fields []*VarDeclNode
+}
+
+func (sd *StructDeclNode) declarationNode()     {}
+func (sd *StructDeclNode) TokenLiteral() string { return sd.Token.Lexeme }
+func (sd *StructDeclNode) String() string       { return "StructDecl" }
+func (sd *StructDeclNode) Line() int            { return sd.Token.Line }
+func (sd *StructDeclNode) Column() int          { return sd.Token.Column }
+func (sd *StructDeclNode) Accept(v Visitor) interface{} {
+	return v.VisitStructDecl(sd)
+}
+
+// VarDeclNode объявление переменной
+type VarDeclNode struct {
 	Token       token.Token
-	Type        string
-	IntValue    int32
-	FloatValue  float64
-	StringValue string
-	BoolValue   bool
+	Type        *TypeNode
+	Name        *IdentifierNode
+	Initializer ExpressionNode
 }
 
-func (le *LiteralExpr) expressionNode()      {}
-func (le *LiteralExpr) TokenLiteral() string { return le.Token.Lexeme }
-func (le *LiteralExpr) String() string       { return le.Token.Lexeme }
-func (le *LiteralExpr) Line() int            { return le.Token.Line }
-func (le *LiteralExpr) Column() int          { return le.Token.Column }
-
-type BinaryExpr struct {
-	Token    token.Token
-	Left     Expression
-	Operator string
-	Right    Expression
+func (vd *VarDeclNode) declarationNode()     {}
+func (vd *VarDeclNode) statementNode()       {}
+func (vd *VarDeclNode) TokenLiteral() string { return vd.Token.Lexeme }
+func (vd *VarDeclNode) String() string       { return "VarDecl" }
+func (vd *VarDeclNode) Line() int            { return vd.Token.Line }
+func (vd *VarDeclNode) Column() int          { return vd.Token.Column }
+func (vd *VarDeclNode) Accept(v Visitor) interface{} {
+	return v.VisitVarDecl(vd)
 }
 
-func (be *BinaryExpr) expressionNode()      {}
-func (be *BinaryExpr) TokenLiteral() string { return be.Token.Lexeme }
-func (be *BinaryExpr) String() string       { return "BinaryExpr" }
-func (be *BinaryExpr) Line() int            { return be.Token.Line }
-func (be *BinaryExpr) Column() int          { return be.Token.Column }
-
-type UnaryExpr struct {
-	Token    token.Token
-	Operator string
-	Right    Expression
+// BlockStmtNode блок операторов
+type BlockStmtNode struct {
+	Token      token.Token
+	Statements []StatementNode
 }
 
-func (ue *UnaryExpr) expressionNode()      {}
-func (ue *UnaryExpr) TokenLiteral() string { return ue.Token.Lexeme }
-func (ue *UnaryExpr) String() string       { return "UnaryExpr" }
-func (ue *UnaryExpr) Line() int            { return ue.Token.Line }
-func (ue *UnaryExpr) Column() int          { return ue.Token.Column }
+func (bs *BlockStmtNode) statementNode()       {}
+func (bs *BlockStmtNode) TokenLiteral() string { return bs.Token.Lexeme }
+func (bs *BlockStmtNode) String() string       { return "BlockStmt" }
+func (bs *BlockStmtNode) Line() int            { return bs.Token.Line }
+func (bs *BlockStmtNode) Column() int          { return bs.Token.Column }
+func (bs *BlockStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitBlockStmt(bs)
+}
 
-type CallExpr struct {
+// IfStmtNode условный оператор
+type IfStmtNode struct {
+	Token       token.Token
+	Condition   ExpressionNode
+	Consequence *BlockStmtNode
+	Alternative StatementNode
+}
+
+func (is *IfStmtNode) statementNode()       {}
+func (is *IfStmtNode) TokenLiteral() string { return is.Token.Lexeme }
+func (is *IfStmtNode) String() string       { return "IfStmt" }
+func (is *IfStmtNode) Line() int            { return is.Token.Line }
+func (is *IfStmtNode) Column() int          { return is.Token.Column }
+func (is *IfStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitIfStmt(is)
+}
+
+type WhileStmtNode struct {
 	Token     token.Token
-	Function  Expression
-	Arguments []Expression
+	Condition ExpressionNode
+	Body      *BlockStmtNode
 }
 
-func (ce *CallExpr) expressionNode()      {}
-func (ce *CallExpr) TokenLiteral() string { return ce.Token.Lexeme }
-func (ce *CallExpr) String() string       { return "CallExpr" }
-func (ce *CallExpr) Line() int            { return ce.Token.Line }
-func (ce *CallExpr) Column() int          { return ce.Token.Column }
+func (ws *WhileStmtNode) statementNode()       {}
+func (ws *WhileStmtNode) TokenLiteral() string { return ws.Token.Lexeme }
+func (ws *WhileStmtNode) String() string       { return "WhileStmt" }
+func (ws *WhileStmtNode) Line() int            { return ws.Token.Line }
+func (ws *WhileStmtNode) Column() int          { return ws.Token.Column }
+func (ws *WhileStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitWhileStmt(ws)
+}
 
-type AssignmentExpr struct {
+type ForStmtNode struct {
+	Token     token.Token
+	Init      StatementNode
+	Condition ExpressionNode
+	Update    ExpressionNode
+	Body      *BlockStmtNode
+}
+
+func (fs *ForStmtNode) statementNode()       {}
+func (fs *ForStmtNode) TokenLiteral() string { return fs.Token.Lexeme }
+func (fs *ForStmtNode) String() string       { return "ForStmt" }
+func (fs *ForStmtNode) Line() int            { return fs.Token.Line }
+func (fs *ForStmtNode) Column() int          { return fs.Token.Column }
+func (fs *ForStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitForStmt(fs)
+}
+
+// ReturnStmtNode оператор возврата
+type ReturnStmtNode struct {
 	Token    token.Token
-	Left     Expression
-	Operator string
-	Right    Expression
+	RetValue ExpressionNode
 }
 
-func (ae *AssignmentExpr) expressionNode()      {}
-func (ae *AssignmentExpr) TokenLiteral() string { return ae.Token.Lexeme }
-func (ae *AssignmentExpr) String() string       { return "AssignmentExpr" }
-func (ae *AssignmentExpr) Line() int            { return ae.Token.Line }
-func (ae *AssignmentExpr) Column() int          { return ae.Token.Column }
+func (rs *ReturnStmtNode) statementNode()       {}
+func (rs *ReturnStmtNode) TokenLiteral() string { return rs.Token.Lexeme }
+func (rs *ReturnStmtNode) String() string       { return "ReturnStmt" }
+func (rs *ReturnStmtNode) Line() int            { return rs.Token.Line }
+func (rs *ReturnStmtNode) Column() int          { return rs.Token.Column }
+func (rs *ReturnStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitReturnStmt(rs)
+}
 
-type Type struct {
+// ExprStmtNode выражение как оператор
+type ExprStmtNode struct {
+	Token      token.Token
+	Expression ExpressionNode
+}
+
+func (es *ExprStmtNode) statementNode()       {}
+func (es *ExprStmtNode) TokenLiteral() string { return es.Token.Lexeme }
+func (es *ExprStmtNode) String() string       { return "ExprStmt" }
+func (es *ExprStmtNode) Line() int            { return es.Token.Line }
+func (es *ExprStmtNode) Column() int          { return es.Token.Column }
+func (es *ExprStmtNode) Accept(v Visitor) interface{} {
+	return v.VisitExprStmt(es)
+}
+
+// IdentifierNode идентификатор
+type IdentifierNode struct {
+	Token          token.Token
+	Value          string
+	TypeAnnotation *TypeAnnotation
+}
+
+func (i *IdentifierNode) expressionNode()      {}
+func (i *IdentifierNode) TokenLiteral() string { return i.Token.Lexeme }
+func (i *IdentifierNode) String() string       { return i.Value }
+func (i *IdentifierNode) Line() int            { return i.Token.Line }
+func (i *IdentifierNode) Column() int          { return i.Token.Column }
+func (i *IdentifierNode) Accept(v Visitor) interface{} {
+	return v.VisitIdentifier(i)
+}
+func (i *IdentifierNode) Type() *TypeAnnotation     { return i.TypeAnnotation }
+func (i *IdentifierNode) SetType(t *TypeAnnotation) { i.TypeAnnotation = t }
+
+// LiteralExprNode литерал
+type LiteralExprNode struct {
+	Token          token.Token
+	TypeName       string
+	IntValue       int32
+	FloatValue     float64
+	StringValue    string
+	BoolValue      bool
+	TypeAnnotation *TypeAnnotation
+}
+
+func (le *LiteralExprNode) expressionNode()      {}
+func (le *LiteralExprNode) TokenLiteral() string { return le.Token.Lexeme }
+func (le *LiteralExprNode) String() string       { return le.Token.Lexeme }
+func (le *LiteralExprNode) Line() int            { return le.Token.Line }
+func (le *LiteralExprNode) Column() int          { return le.Token.Column }
+func (le *LiteralExprNode) Accept(v Visitor) interface{} {
+	return v.VisitLiteralExpr(le)
+}
+func (le *LiteralExprNode) Type() *TypeAnnotation     { return le.TypeAnnotation }
+func (le *LiteralExprNode) SetType(t *TypeAnnotation) { le.TypeAnnotation = t }
+
+// BinaryExprNode бинарное выражение
+type BinaryExprNode struct {
+	Token          token.Token
+	Left           ExpressionNode
+	Operator       string
+	Right          ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (be *BinaryExprNode) expressionNode()      {}
+func (be *BinaryExprNode) TokenLiteral() string { return be.Token.Lexeme }
+func (be *BinaryExprNode) String() string       { return "BinaryExpr" }
+func (be *BinaryExprNode) Line() int            { return be.Token.Line }
+func (be *BinaryExprNode) Column() int          { return be.Token.Column }
+func (be *BinaryExprNode) Accept(v Visitor) interface{} {
+	return v.VisitBinaryExpr(be)
+}
+func (be *BinaryExprNode) Type() *TypeAnnotation     { return be.TypeAnnotation }
+func (be *BinaryExprNode) SetType(t *TypeAnnotation) { be.TypeAnnotation = t }
+
+// UnaryExprNode унарное выражение
+type UnaryExprNode struct {
+	Token          token.Token
+	Operator       string
+	Right          ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (ue *UnaryExprNode) expressionNode()      {}
+func (ue *UnaryExprNode) TokenLiteral() string { return ue.Token.Lexeme }
+func (ue *UnaryExprNode) String() string       { return "UnaryExpr" }
+func (ue *UnaryExprNode) Line() int            { return ue.Token.Line }
+func (ue *UnaryExprNode) Column() int          { return ue.Token.Column }
+func (ue *UnaryExprNode) Accept(v Visitor) interface{} {
+	return v.VisitUnaryExpr(ue)
+}
+func (ue *UnaryExprNode) Type() *TypeAnnotation     { return ue.TypeAnnotation }
+func (ue *UnaryExprNode) SetType(t *TypeAnnotation) { ue.TypeAnnotation = t }
+
+// CallExprNode вызов функции
+type CallExprNode struct {
+	Token          token.Token
+	Function       ExpressionNode
+	Arguments      []ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (ce *CallExprNode) expressionNode()      {}
+func (ce *CallExprNode) TokenLiteral() string { return ce.Token.Lexeme }
+func (ce *CallExprNode) String() string       { return "CallExpr" }
+func (ce *CallExprNode) Line() int            { return ce.Token.Line }
+func (ce *CallExprNode) Column() int          { return ce.Token.Column }
+func (ce *CallExprNode) Accept(v Visitor) interface{} {
+	return v.VisitCallExpr(ce)
+}
+func (ce *CallExprNode) Type() *TypeAnnotation     { return ce.TypeAnnotation }
+func (ce *CallExprNode) SetType(t *TypeAnnotation) { ce.TypeAnnotation = t }
+
+// AssignmentExprNode присваивание
+type AssignmentExprNode struct {
+	Token          token.Token
+	Left           ExpressionNode
+	Operator       string
+	Right          ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (ae *AssignmentExprNode) expressionNode()      {}
+func (ae *AssignmentExprNode) TokenLiteral() string { return ae.Token.Lexeme }
+func (ae *AssignmentExprNode) String() string       { return "AssignmentExpr" }
+func (ae *AssignmentExprNode) Line() int            { return ae.Token.Line }
+func (ae *AssignmentExprNode) Column() int          { return ae.Token.Column }
+func (ae *AssignmentExprNode) Accept(v Visitor) interface{} {
+	return v.VisitAssignmentExpr(ae)
+}
+func (ae *AssignmentExprNode) Type() *TypeAnnotation     { return ae.TypeAnnotation }
+func (ae *AssignmentExprNode) SetType(t *TypeAnnotation) { ae.TypeAnnotation = t }
+
+type TypeNode struct {
 	Token token.Token
 	Kind  string
 	Name  string
 }
 
-func (t *Type) String() string {
+func (t *TypeNode) String() string {
 	if t.Kind == "identifier" {
 		return t.Name
 	}
 	return t.Kind
-}
-
-type Parameter struct {
-	Token token.Token
-	Type  Type
-	Name  *Identifier
-}
-
-func (p *Parameter) String() string {
-	return p.Type.String() + " " + p.Name.String()
 }

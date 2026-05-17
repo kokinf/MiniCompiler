@@ -7,7 +7,7 @@ Program:
         Condition:
           (x > 0)
         Then:
-          Block [line 2-3]:
+          Block [line 2-2]:
             Return: 1
       Return: 0
   FunctionDecl: test2 -> int [line 8]:
@@ -18,11 +18,11 @@ Program:
         Condition:
           (x > 0)
         Then:
-          Block [line 9-10]:
+          Block [line 9-9]:
             Return: 1
         Else:
-          Block [line 11-12]:
-            Return: (-1)
+          Block [line 11-11]:
+            Return: -1
   FunctionDecl: test3 -> int [line 16]:
     Parameters:
       int x
@@ -31,17 +31,17 @@ Program:
         Condition:
           (x > 0)
         Then:
-          Block [line 17-18]:
+          Block [line 17-17]:
             Return: 1
         Else:
           IfStmt [line 19]:
             Condition:
               (x < 0)
             Then:
-              Block [line 19-20]:
-                Return: (-1)
+              Block [line 19-19]:
+                Return: -1
             Else:
-              Block [line 21-22]:
+              Block [line 21-21]:
                 Return: 0
   FunctionDecl: test4 -> int [line 26]:
     Parameters:
@@ -59,7 +59,7 @@ Program:
               (x < 0)
             Then:
               Block [line 30-30]:
-                Return: (-1)
+                Return: -1
             Else:
               Block [line 32-32]:
                 Return: 0
@@ -72,24 +72,24 @@ Program:
         Condition:
           (x > 0)
         Then:
-          Block [line 36-37]:
+          Block [line 36-36]:
             IfStmt [line 37]:
               Condition:
                 (y > 0)
               Then:
-                Block [line 37-38]:
+                Block [line 37-37]:
                   Return: (x + y)
               Else:
-                Block [line 39-40]:
+                Block [line 39-39]:
                   Return: x
         Else:
-          Block [line 42-43]:
+          Block [line 42-42]:
             IfStmt [line 43]:
               Condition:
                 (y > 0)
               Then:
-                Block [line 43-44]:
+                Block [line 43-43]:
                   Return: y
               Else:
-                Block [line 45-46]:
+                Block [line 45-45]:
                   Return: 0

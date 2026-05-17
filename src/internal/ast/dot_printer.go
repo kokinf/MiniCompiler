@@ -16,7 +16,7 @@ func NewDOTPrinter() *DOTPrinter {
 	}
 }
 
-func (p *DOTPrinter) Print(program *Program) string {
+func (p *DOTPrinter) Print(program *ProgramNode) string {
 	p.output.Reset()
 	p.nodeCounter = 0
 
@@ -45,7 +45,7 @@ func (p *DOTPrinter) printNode(node Node) int {
 	id := p.nextID()
 
 	switch n := node.(type) {
-	case *FunctionDecl:
+	case *FunctionDeclNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Function\\n%s -> %s\", fillcolor=lightgreen];\n",
 			id, n.Name.Value, n.ReturnType.String()))
 
@@ -63,7 +63,7 @@ func (p *DOTPrinter) printNode(node Node) int {
 		bodyID := p.printBlockStmt(n.Body)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"body\"];\n", id, bodyID))
 
-	case *StructDecl:
+	case *StructDeclNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Struct\\n%s\", fillcolor=lightgreen];\n",
 			id, n.Name.Value))
 
@@ -74,7 +74,7 @@ func (p *DOTPrinter) printNode(node Node) int {
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, fieldID))
 		}
 
-	case *VarDecl:
+	case *VarDeclNode:
 		label := fmt.Sprintf("VarDecl\\n%s %s", n.Type.String(), n.Name.Value)
 		if n.Initializer != nil {
 			label += " = ..."
@@ -86,7 +86,7 @@ func (p *DOTPrinter) printNode(node Node) int {
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"init\"];\n", id, initID))
 		}
 
-	case *ForStmt:
+	case *ForStmtNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"For\", fillcolor=lightcoral];\n", id))
 
 		if n.Init != nil {
@@ -123,7 +123,7 @@ func (p *DOTPrinter) printNode(node Node) int {
 	return id
 }
 
-func (p *DOTPrinter) printBlockStmt(block *BlockStmt) int {
+func (p *DOTPrinter) printBlockStmt(block *BlockStmtNode) int {
 	id := p.nextID()
 	p.output.WriteString(fmt.Sprintf("  node%d [label=\"Block\", fillcolor=lightcoral];\n", id))
 
@@ -135,13 +135,19 @@ func (p *DOTPrinter) printBlockStmt(block *BlockStmt) int {
 	return id
 }
 
-func (p *DOTPrinter) printStatement(stmt Statement) int {
+func (p *DOTPrinter) printStatement(stmt StatementNode) int {
+	if stmt == nil {
+		id := p.nextID()
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"<empty>\", shape=box, fillcolor=lightgray];\n", id))
+		return id
+	}
+
 	id := p.nextID()
 
 	switch s := stmt.(type) {
-	case *BlockStmt:
+	case *BlockStmtNode:
 		return p.printBlockStmt(s)
-	case *IfStmt:
+	case *IfStmtNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"If\", fillcolor=lightcoral];\n", id))
 
 		condID := p.printExpression(s.Condition)
@@ -155,7 +161,7 @@ func (p *DOTPrinter) printStatement(stmt Statement) int {
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"else\"];\n", id, elseID))
 		}
 
-	case *WhileStmt:
+	case *WhileStmtNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"While\", fillcolor=lightcoral];\n", id))
 
 		condID := p.printExpression(s.Condition)
@@ -164,10 +170,10 @@ func (p *DOTPrinter) printStatement(stmt Statement) int {
 		bodyID := p.printBlockStmt(s.Body)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"body\"];\n", id, bodyID))
 
-	case *ForStmt:
+	case *ForStmtNode:
 		return p.printNode(s)
 
-	case *ReturnStmt:
+	case *ReturnStmtNode:
 		label := "Return"
 		if s.RetValue != nil {
 			label += " (with value)"
@@ -179,7 +185,7 @@ func (p *DOTPrinter) printStatement(stmt Statement) int {
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, valID))
 		}
 
-	case *ExprStmt:
+	case *ExprStmtNode:
 		exprID := p.printExpression(s.Expression)
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"ExprStmt\", fillcolor=lightcoral];\n", id))
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, exprID))
@@ -188,35 +194,58 @@ func (p *DOTPrinter) printStatement(stmt Statement) int {
 	return id
 }
 
-func (p *DOTPrinter) printExpression(expr Expression) int {
+func (p *DOTPrinter) printExpression(expr ExpressionNode) int {
+	if expr == nil {
+		id := p.nextID()
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"<nil>\", shape=box, fillcolor=lightgray];\n", id))
+		return id
+	}
+
 	id := p.nextID()
 
 	switch e := expr.(type) {
-	case *Identifier:
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Ident: %s\", shape=box, fillcolor=lightgray];\n",
-			id, e.Value))
+	case *IdentifierNode:
+		label := fmt.Sprintf("Ident: %s", e.Value)
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", shape=box, fillcolor=lightgray];\n", id, label))
 
-	case *LiteralExpr:
+	case *LiteralExprNode:
 		label := fmt.Sprintf("Literal: %s", e.Token.Lexeme)
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", shape=box, fillcolor=lightgray];\n",
-			id, label))
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", shape=box, fillcolor=lightgray];\n", id, label))
 
-	case *BinaryExpr:
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, e.Operator))
+	case *BinaryExprNode:
+		label := e.Operator
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, label))
 
 		leftID := p.printExpression(e.Left)
 		rightID := p.printExpression(e.Right)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"left\"];\n", id, leftID))
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"right\"];\n", id, rightID))
 
-	case *UnaryExpr:
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, e.Operator))
+	case *UnaryExprNode:
+		label := e.Operator
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, label))
 
 		rightID := p.printExpression(e.Right)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, rightID))
 
-	case *CallExpr:
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Call\", fillcolor=lightgray];\n", id))
+	case *CallExprNode:
+		label := "Call"
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, label))
 
 		funcID := p.printExpression(e.Function)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"func\"];\n", id, funcID))
@@ -226,8 +255,12 @@ func (p *DOTPrinter) printExpression(expr Expression) int {
 			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"arg%d\"];\n", id, argID, i))
 		}
 
-	case *AssignmentExpr:
-		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, e.Operator))
+	case *AssignmentExprNode:
+		label := e.Operator
+		if t := e.Type(); t != nil {
+			label += fmt.Sprintf("\\n[%s]", t.Kind)
+		}
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", fillcolor=lightgray];\n", id, label))
 
 		leftID := p.printExpression(e.Left)
 		rightID := p.printExpression(e.Right)

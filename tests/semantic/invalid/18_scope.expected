@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
-=== Ошибки семантического анализа ===
+ Ошибки 
 undeclared_identifier: identifier 'x' not declared
   --> line 5, column 12
   |

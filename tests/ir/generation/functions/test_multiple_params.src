@@ -1,0 +1,7 @@
+fn sum(int a, int b, int c, int d) -> int {
+    return a + b + c + d;
+}
+
+fn main() -> int {
+    return sum(1, 2, 3, 4);
+}

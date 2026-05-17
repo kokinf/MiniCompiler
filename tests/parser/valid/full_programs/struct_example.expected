@@ -9,7 +9,7 @@ Program:
       Point bottomRight
   FunctionDecl: area -> int [line 11]:
     Parameters:
-      Rectangle rect
+      rect Rectangle
     Body:
       VarDecl: int width = (x - x)
       VarDecl: int height = (y - y)

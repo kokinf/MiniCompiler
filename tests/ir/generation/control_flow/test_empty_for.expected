@@ -1,0 +1,42 @@
+function main: int ()
+  ; Locals:
+  ;   i: int (offset 0, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var i: int
+  STORE [%t1], 0
+  JUMP for_header_1
+
+for_header_1:
+  ; preds: entry, for_update_3
+  JUMP for_body_2
+
+for_body_2:
+  ; preds: for_header_1
+  ; idom: for_header_1
+  %t2 = LOAD [%t1]
+  %t3 = ADD %t2, 1
+  STORE [%t1], %t3
+  %t4 = LOAD [%t1]
+  %t5 = CMP_GT %t4, 10
+  JUMP_IF %t5, if_then_5
+  JUMP if_merge_6
+
+for_update_3:
+  ; preds: if_merge_6
+  ; idom: if_merge_6
+  JUMP for_header_1
+
+for_exit_4:
+  RETURN 0
+
+if_then_5:
+  ; preds: for_body_2
+  ; idom: for_body_2
+  %t6 = LOAD [%t1]
+  RETURN %t6
+
+if_merge_6:
+  ; preds: for_body_2
+  ; idom: for_body_2
+  JUMP for_update_3

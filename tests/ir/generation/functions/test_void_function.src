@@ -1,0 +1,8 @@
+fn printValue(int x) -> void {
+    return;
+}
+
+fn main() -> int {
+    printValue(42);
+    return 0;
+}

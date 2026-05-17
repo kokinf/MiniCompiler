@@ -1,0 +1,41 @@
+function main: int ()
+  ; Locals:
+  ;   a: int (offset 0, size 4)
+  ;   b: int (offset 8, size 4)
+  ;   c: int (offset 16, size 4)
+  ;   d: int (offset 24, size 4)
+  ;   e: int (offset 32, size 4)
+  ;   f: int (offset 40, size 4)
+  ;   g: int (offset 48, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var a: int
+  STORE [%t1], 10
+  %t2 = ALLOCA 4  ; var b: int
+  STORE [%t2], 20
+  %t3 = ALLOCA 4  ; var c: int
+  %t4 = LOAD [%t1]
+  %t5 = LOAD [%t2]
+  %t6 = ADD %t4, %t5
+  STORE [%t3], %t6
+  %t7 = ALLOCA 4  ; var d: int
+  %t8 = LOAD [%t1]
+  %t9 = LOAD [%t2]
+  %t10 = SUB %t8, %t9
+  STORE [%t7], %t10
+  %t11 = ALLOCA 4  ; var e: int
+  %t12 = LOAD [%t1]
+  %t13 = LOAD [%t2]
+  %t14 = MUL %t12, %t13
+  STORE [%t11], %t14
+  %t15 = ALLOCA 4  ; var f: int
+  %t16 = LOAD [%t2]
+  %t17 = LOAD [%t1]
+  %t18 = DIV %t16, %t17
+  STORE [%t15], %t18
+  %t19 = ALLOCA 4  ; var g: int
+  %t20 = LOAD [%t2]
+  %t21 = MOD %t20, 3
+  STORE [%t19], %t21
+  %t22 = LOAD [%t3]
+  RETURN %t22

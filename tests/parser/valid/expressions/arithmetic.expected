@@ -11,9 +11,9 @@ Program:
       VarDecl: int g = ((1 + 2) * 3)
       VarDecl: int h = ((10 - 5) - 2)
       VarDecl: int i = ((2 * 3) + (4 * 5))
-      VarDecl: int j = (-5)
-      VarDecl: int k = (-(-5))
-      VarDecl: int l = (10 + (-3))
+      VarDecl: int j = -5
+      VarDecl: int k = (--5)
+      VarDecl: int l = (10 + -3)
       VarDecl: float m = (3.14 + 2.5)
       VarDecl: float n = (10 / 3)
       Return: (((((((((((a + b) + c) + d) + e) + f) + g) + h) + i) + j) + k) + l)

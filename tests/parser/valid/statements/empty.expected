@@ -2,8 +2,8 @@ Program:
   FunctionDecl: empty_block -> void [line 1]:
     Parameters:
     Body:
-      Block [line 2-3]:
-        Block [line 3-4]:
+      Block [line 2-2]:
+        Block [line 3-3]:
           Block [line 4-4]:
       Return
   FunctionDecl: empty_if -> void [line 11]:
@@ -22,7 +22,7 @@ Program:
         Condition:
           false
         Then:
-          Block [line 19-20]:
+          Block [line 19-19]:
             Return
         Else:
           Block [line 21-21]:
@@ -40,9 +40,6 @@ Program:
     Parameters:
     Body:
       ForStmt [line 33]:
-        Init: <empty>
-        Condition: <empty>
-        Update: <empty>
         Body:
           Block [line 33-33]:
       Return

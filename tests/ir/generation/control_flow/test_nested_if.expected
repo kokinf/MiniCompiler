@@ -1,0 +1,53 @@
+function main: int ()
+  ; Locals:
+  ;   result: int (offset 16, size 4)
+  ;   x: int (offset 0, size 4)
+  ;   y: int (offset 8, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var x: int
+  STORE [%t1], 10
+  %t2 = ALLOCA 4  ; var y: int
+  STORE [%t2], 20
+  %t3 = ALLOCA 4  ; var result: int
+  STORE [%t3], 0
+  %t4 = LOAD [%t1]
+  %t5 = CMP_GT %t4, 5
+  JUMP_IF %t5, if_then_1
+  JUMP if_else_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  %t6 = LOAD [%t2]
+  %t7 = CMP_GT %t6, 15
+  JUMP_IF %t7, if_then_4
+  JUMP if_else_5
+
+if_else_2:
+  ; preds: entry
+  ; idom: entry
+  STORE [%t3], 3
+  JUMP if_merge_3
+
+if_merge_3:
+  ; preds: if_merge_6, if_else_2
+  %t8 = LOAD [%t3]
+  RETURN %t8
+
+if_then_4:
+  ; preds: if_then_1
+  ; idom: if_then_1
+  STORE [%t3], 1
+  JUMP if_merge_6
+
+if_else_5:
+  ; preds: if_then_1
+  ; idom: if_then_1
+  STORE [%t3], 2
+  JUMP if_merge_6
+
+if_merge_6:
+  ; preds: if_then_4, if_else_5
+  ; idom: if_then_1
+  JUMP if_merge_3

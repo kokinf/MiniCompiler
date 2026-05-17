@@ -1,0 +1,23 @@
+function main: int ()
+  ; Locals:
+  ;   x: int (offset 0, size 4)
+  ;   y: int (offset 8, size 4)
+  ;   z: int (offset 16, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var x: int
+  STORE [%t1], 10
+  %t2 = ALLOCA 4  ; var y: int
+  STORE [%t2], 20
+  %t3 = LOAD [%t1]
+  %t4 = LOAD [%t2]
+  %t5 = ADD %t3, %t4
+  STORE [%t1], %t5
+  %t6 = ALLOCA 4  ; var z: int
+  STORE [%t6], 30
+  %t7 = LOAD [%t1]
+  %t8 = LOAD [%t6]
+  %t9 = ADD %t7, %t8
+  STORE [%t1], %t9
+  %t10 = LOAD [%t1]
+  RETURN %t10

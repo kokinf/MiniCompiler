@@ -20,9 +20,10 @@ type jsonNode struct {
 	Name     string      `json:"name,omitempty"`
 	Operator string      `json:"operator,omitempty"`
 	Kind     string      `json:"kind,omitempty"`
+	TypeAnn  string      `json:"typeAnnotation,omitempty"`
 }
 
-func (p *JSONPrinter) Print(program *Program) string {
+func (p *JSONPrinter) Print(program *ProgramNode) string {
 	node := p.convertProgram(program)
 	jsonBytes, err := json.MarshalIndent(node, "", "  ")
 	if err != nil {
@@ -31,7 +32,7 @@ func (p *JSONPrinter) Print(program *Program) string {
 	return string(jsonBytes)
 }
 
-func (p *JSONPrinter) convertProgram(program *Program) jsonNode {
+func (p *JSONPrinter) convertProgram(program *ProgramNode) jsonNode {
 	children := make([]interface{}, len(program.Declarations))
 	for i, decl := range program.Declarations {
 		children[i] = p.convertDeclaration(decl)
@@ -45,9 +46,9 @@ func (p *JSONPrinter) convertProgram(program *Program) jsonNode {
 	}
 }
 
-func (p *JSONPrinter) convertDeclaration(decl Declaration) interface{} {
+func (p *JSONPrinter) convertDeclaration(decl DeclarationNode) interface{} {
 	switch d := decl.(type) {
-	case *FunctionDecl:
+	case *FunctionDeclNode:
 		params := make([]interface{}, len(d.Parameters))
 		for i, param := range d.Parameters {
 			params[i] = map[string]interface{}{
@@ -68,7 +69,7 @@ func (p *JSONPrinter) convertDeclaration(decl Declaration) interface{} {
 			Children: []interface{}{p.convertStatement(d.Body)},
 		}
 
-	case *StructDecl:
+	case *StructDeclNode:
 		fields := make([]interface{}, len(d.Fields))
 		for i, field := range d.Fields {
 			fields[i] = map[string]interface{}{
@@ -87,7 +88,7 @@ func (p *JSONPrinter) convertDeclaration(decl Declaration) interface{} {
 			},
 		}
 
-	case *VarDecl:
+	case *VarDeclNode:
 		node := jsonNode{
 			Type:   "VarDecl",
 			Line:   d.Line(),
@@ -103,9 +104,13 @@ func (p *JSONPrinter) convertDeclaration(decl Declaration) interface{} {
 	return nil
 }
 
-func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
+func (p *JSONPrinter) convertStatement(stmt StatementNode) interface{} {
+	if stmt == nil {
+		return nil
+	}
+
 	switch s := stmt.(type) {
-	case *BlockStmt:
+	case *BlockStmtNode:
 		children := make([]interface{}, len(s.Statements))
 		for i, stmt := range s.Statements {
 			children[i] = p.convertStatement(stmt)
@@ -117,7 +122,7 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 			Children: children,
 		}
 
-	case *IfStmt:
+	case *IfStmtNode:
 		node := jsonNode{
 			Type:   "IfStmt",
 			Line:   s.Line(),
@@ -133,7 +138,7 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 		node.Children = children
 		return node
 
-	case *WhileStmt:
+	case *WhileStmtNode:
 		return jsonNode{
 			Type:   "WhileStmt",
 			Line:   s.Line(),
@@ -144,7 +149,7 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 			},
 		}
 
-	case *ForStmt:
+	case *ForStmtNode:
 		children := []interface{}{}
 		if s.Init != nil {
 			children = append(children, map[string]interface{}{"init": p.convertStatement(s.Init)})
@@ -163,7 +168,7 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 			Children: children,
 		}
 
-	case *ReturnStmt:
+	case *ReturnStmtNode:
 		node := jsonNode{
 			Type:   "ReturnStmt",
 			Line:   s.Line(),
@@ -174,7 +179,7 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 		}
 		return node
 
-	case *ExprStmt:
+	case *ExprStmtNode:
 		return jsonNode{
 			Type:     "ExprStmt",
 			Line:     s.Line(),
@@ -182,25 +187,35 @@ func (p *JSONPrinter) convertStatement(stmt Statement) interface{} {
 			Children: []interface{}{p.convertExpression(s.Expression)},
 		}
 
-	case *VarDecl:
+	case *VarDeclNode:
 		return p.convertDeclaration(s)
 	}
 	return nil
 }
 
-func (p *JSONPrinter) convertExpression(expr Expression) interface{} {
+func (p *JSONPrinter) convertExpression(expr ExpressionNode) interface{} {
+	if expr == nil {
+		return nil
+	}
+
+	typeAnn := ""
+	if t := expr.Type(); t != nil {
+		typeAnn = t.Kind
+	}
+
 	switch e := expr.(type) {
-	case *Identifier:
+	case *IdentifierNode:
 		return jsonNode{
-			Type:   "Identifier",
-			Line:   e.Line(),
-			Column: e.Column(),
-			Name:   e.Value,
+			Type:    "Identifier",
+			Line:    e.Line(),
+			Column:  e.Column(),
+			Name:    e.Value,
+			TypeAnn: typeAnn,
 		}
 
-	case *LiteralExpr:
+	case *LiteralExprNode:
 		var value interface{}
-		switch e.Type {
+		switch e.TypeName {
 		case "int":
 			value = e.IntValue
 		case "float":
@@ -211,55 +226,60 @@ func (p *JSONPrinter) convertExpression(expr Expression) interface{} {
 			value = e.BoolValue
 		}
 		return jsonNode{
-			Type:   "LiteralExpr",
-			Line:   e.Line(),
-			Column: e.Column(),
-			Kind:   e.Type,
-			Value:  value,
+			Type:    "LiteralExpr",
+			Line:    e.Line(),
+			Column:  e.Column(),
+			Kind:    e.TypeName,
+			Value:   value,
+			TypeAnn: typeAnn,
 		}
 
-	case *BinaryExpr:
+	case *BinaryExprNode:
 		return jsonNode{
 			Type:     "BinaryExpr",
 			Line:     e.Line(),
 			Column:   e.Column(),
 			Operator: e.Operator,
+			TypeAnn:  typeAnn,
 			Children: []interface{}{
 				map[string]interface{}{"left": p.convertExpression(e.Left)},
 				map[string]interface{}{"right": p.convertExpression(e.Right)},
 			},
 		}
 
-	case *UnaryExpr:
+	case *UnaryExprNode:
 		return jsonNode{
 			Type:     "UnaryExpr",
 			Line:     e.Line(),
 			Column:   e.Column(),
 			Operator: e.Operator,
+			TypeAnn:  typeAnn,
 			Children: []interface{}{p.convertExpression(e.Right)},
 		}
 
-	case *CallExpr:
+	case *CallExprNode:
 		args := make([]interface{}, len(e.Arguments))
 		for i, arg := range e.Arguments {
 			args[i] = p.convertExpression(arg)
 		}
 		return jsonNode{
-			Type:   "CallExpr",
-			Line:   e.Line(),
-			Column: e.Column(),
+			Type:    "CallExpr",
+			Line:    e.Line(),
+			Column:  e.Column(),
+			TypeAnn: typeAnn,
 			Children: []interface{}{
 				map[string]interface{}{"function": p.convertExpression(e.Function)},
 				map[string]interface{}{"arguments": args},
 			},
 		}
 
-	case *AssignmentExpr:
+	case *AssignmentExprNode:
 		return jsonNode{
 			Type:     "AssignmentExpr",
 			Line:     e.Line(),
 			Column:   e.Column(),
 			Operator: e.Operator,
+			TypeAnn:  typeAnn,
 			Children: []interface{}{
 				map[string]interface{}{"left": p.convertExpression(e.Left)},
 				map[string]interface{}{"right": p.convertExpression(e.Right)},

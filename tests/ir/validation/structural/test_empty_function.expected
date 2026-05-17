@@ -1,0 +1,10 @@
+function empty: void ()
+
+entry:
+  RETURN
+
+function main: int ()
+
+entry:
+  %t1 = CALL empty()
+  RETURN 0

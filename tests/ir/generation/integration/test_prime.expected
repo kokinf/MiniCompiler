@@ -1,0 +1,80 @@
+function isPrime: bool (int n)
+  ; Locals:
+  ;   i: int (offset 8, size 4)
+  ;   n: int (offset 8, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; param n: int
+  STORE [%t1], n
+  %t2 = LOAD [%t1]
+  %t3 = CMP_LE %t2, 1
+  JUMP_IF %t3, if_then_1
+  JUMP if_merge_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  RETURN false
+
+if_merge_2:
+  ; preds: entry
+  ; idom: entry
+  %t4 = ALLOCA 4  ; var i: int
+  STORE [%t4], 2
+  JUMP while_header_3
+
+while_header_3:
+  ; preds: if_merge_2, if_merge_7
+  %t5 = LOAD [%t4]
+  %t6 = LOAD [%t4]
+  %t7 = MUL %t5, %t6
+  %t8 = LOAD [%t1]
+  %t9 = CMP_LE %t7, %t8
+  JUMP_IF %t9, while_body_4
+  JUMP while_exit_5
+
+while_body_4:
+  ; preds: while_header_3
+  ; idom: while_header_3
+  %t10 = LOAD [%t1]
+  %t11 = LOAD [%t4]
+  %t12 = MOD %t10, %t11
+  %t13 = CMP_EQ %t12, 0
+  JUMP_IF %t13, if_then_6
+  JUMP if_merge_7
+
+while_exit_5:
+  ; preds: while_header_3
+  ; idom: while_header_3
+  RETURN true
+
+if_then_6:
+  ; preds: while_body_4
+  ; idom: while_body_4
+  RETURN false
+
+if_merge_7:
+  ; preds: while_body_4
+  ; idom: while_body_4
+  %t14 = LOAD [%t4]
+  %t15 = ADD %t14, 1
+  STORE [%t4], %t15
+  JUMP while_header_3
+
+function main: int ()
+
+entry:
+  PARAM 0, 17
+  %t1 = CALL isPrime(17)
+  JUMP_IF %t1, if_then_1
+  JUMP if_merge_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  RETURN 1
+
+if_merge_2:
+  ; preds: entry
+  ; idom: entry
+  RETURN 0

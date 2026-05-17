@@ -20,6 +20,7 @@ const (
 	KW_INT    TokenType = "KW_INT"
 	KW_FLOAT  TokenType = "KW_FLOAT"
 	KW_BOOL   TokenType = "KW_BOOL"
+	KW_STRING TokenType = "KW_STRING"
 	KW_RETURN TokenType = "KW_RETURN"
 	KW_TRUE   TokenType = "KW_TRUE"
 	KW_FALSE  TokenType = "KW_FALSE"
@@ -46,6 +47,7 @@ const (
 
 	EQ     TokenType = "EQ"     // ==
 	NOT_EQ TokenType = "NOT_EQ" // !=
+	NOT    TokenType = "NOT"    // !
 	LT     TokenType = "LT"     // <
 	LT_EQ  TokenType = "LT_EQ"  // <=
 	GT     TokenType = "GT"     // >
@@ -129,6 +131,7 @@ var Keywords = map[string]TokenType{
 	"int":    KW_INT,
 	"float":  KW_FLOAT,
 	"bool":   KW_BOOL,
+	"string": KW_STRING,
 	"return": KW_RETURN,
 	"true":   KW_TRUE,
 	"false":  KW_FALSE,

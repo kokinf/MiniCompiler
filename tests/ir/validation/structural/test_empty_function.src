@@ -1,0 +1,7 @@
+fn empty() -> void {
+}
+
+fn main() -> int {
+    empty();
+    return 0;
+}

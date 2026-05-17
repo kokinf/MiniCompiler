@@ -1,3 +1,12 @@
-Ошибки парсинга:
-  объявление переменной должно содержать тип (строка 4, колонка 9)
-  ожидался токен RBRACE, получен END_OF_FILE (строка 8, колонка 1)
+Symbol Table:
+global scope (level 0):
+  main: function function -> int (line 1)
+
+
+ Ошибки 
+invalid_condition: while condition must be bool, got int
+  --> line 3, column 5
+  |
+  = in function main
+  = while condition must be bool, got int
+

@@ -140,3 +140,20 @@ func (t *Type) IsAssignableTo(target *Type) bool {
 
 	return false
 }
+
+func (t *Type) IsAssignable(other *Type) bool {
+	if t == nil || other == nil {
+		return false
+	}
+
+	if t.Equals(other) {
+		return true
+	}
+
+	// int -> float widening
+	if t.Kind == TypeInt && other.Kind == TypeFloat {
+		return true
+	}
+
+	return false
+}

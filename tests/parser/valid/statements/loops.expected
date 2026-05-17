@@ -8,7 +8,7 @@ Program:
         Condition:
           (i < 10)
         Body:
-          Block [line 5-7]:
+          Block [line 5-5]:
             Expr: sum = (sum + i)
             Expr: i = (i + 1)
       Return: sum
@@ -21,7 +21,7 @@ Program:
         Condition: (i < 10)
         Update: i = (i + 1)
         Body:
-          Block [line 16-17]:
+          Block [line 16-16]:
             Expr: sum = (sum + i)
       Return: sum
   FunctionDecl: test_for_cond -> int [line 23]:
@@ -30,11 +30,9 @@ Program:
       VarDecl: int i = 0
       VarDecl: int sum = 0
       ForStmt [line 27]:
-        Init: <empty>
         Condition: (i < 10)
-        Update: <empty>
         Body:
-          Block [line 27-29]:
+          Block [line 27-27]:
             Expr: sum = (sum + i)
             Expr: i = (i + 1)
       Return: sum
@@ -43,17 +41,14 @@ Program:
     Body:
       VarDecl: int i = 0
       ForStmt [line 38]:
-        Init: <empty>
-        Condition: <empty>
-        Update: <empty>
         Body:
-          Block [line 38-40]:
+          Block [line 38-38]:
             Expr: i = (i + 1)
             IfStmt [line 40]:
               Condition:
                 (i > 100)
               Then:
-                Block [line 40-41]:
+                Block [line 40-40]:
                   Return: i
   FunctionDecl: test_nested_loops -> int [line 46]:
     Parameters:
@@ -64,12 +59,12 @@ Program:
         Condition: (i < 5)
         Update: i = (i + 1)
         Body:
-          Block [line 49-50]:
+          Block [line 49-49]:
             ForStmt [line 50]:
               Init: VarDecl: int j = 0
               Condition: (j < 5)
               Update: j = (j + 1)
               Body:
-                Block [line 50-51]:
+                Block [line 50-50]:
                   Expr: sum = (sum + (i * j))
       Return: sum

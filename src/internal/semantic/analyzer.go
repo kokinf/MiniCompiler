@@ -12,40 +12,44 @@ type SemanticAnalyzer struct {
 	currentFunc  *Symbol
 	currentScope string
 	inLoop       bool
+
+	// Для отслеживания объявленных переменных в текущем блоке
+	declaredInBlock map[string]bool
 }
 
 func NewSemanticAnalyzer() *SemanticAnalyzer {
 	return &SemanticAnalyzer{
-		symbolTable:  NewSymbolTable(),
-		errors:       NewErrorCollector(),
-		currentFunc:  nil,
-		currentScope: "global",
-		inLoop:       false,
+		symbolTable:     NewSymbolTable(),
+		errors:          NewErrorCollector(),
+		currentFunc:     nil,
+		currentScope:    "global",
+		inLoop:          false,
+		declaredInBlock: make(map[string]bool),
 	}
 }
 
-func (sa *SemanticAnalyzer) Analyze(program *ast.Program) (*SymbolTable, *ErrorCollector) {
+func (sa *SemanticAnalyzer) Analyze(program *ast.ProgramNode) (*SymbolTable, *ErrorCollector, *ast.ProgramNode) {
 	sa.collectDeclarations(program)
 
-	sa.analyzeProgram(program)
+	decoratedProgram := sa.analyzeProgram(program)
 
-	return sa.symbolTable, sa.errors
+	return sa.symbolTable, sa.errors, decoratedProgram
 }
 
-func (sa *SemanticAnalyzer) collectDeclarations(program *ast.Program) {
+func (sa *SemanticAnalyzer) collectDeclarations(program *ast.ProgramNode) {
 	for _, decl := range program.Declarations {
 		switch d := decl.(type) {
-		case *ast.FunctionDecl:
+		case *ast.FunctionDeclNode:
 			sa.collectFunctionDecl(d)
-		case *ast.StructDecl:
+		case *ast.StructDeclNode:
 			sa.collectStructDecl(d)
-		case *ast.VarDecl:
+		case *ast.VarDeclNode:
 			sa.collectGlobalVarDecl(d)
 		}
 	}
 }
 
-func (sa *SemanticAnalyzer) collectFunctionDecl(fd *ast.FunctionDecl) {
+func (sa *SemanticAnalyzer) collectFunctionDecl(fd *ast.FunctionDeclNode) {
 	funcName := fd.Name.Value
 
 	if existing := sa.symbolTable.Lookup(funcName); existing != nil {
@@ -94,7 +98,7 @@ func (sa *SemanticAnalyzer) collectFunctionDecl(fd *ast.FunctionDecl) {
 	sa.symbolTable.Insert(sym)
 }
 
-func (sa *SemanticAnalyzer) collectStructDecl(sd *ast.StructDecl) {
+func (sa *SemanticAnalyzer) collectStructDecl(sd *ast.StructDeclNode) {
 	structName := sd.Name.Value
 
 	if existing := sa.symbolTable.Lookup(structName); existing != nil {
@@ -119,7 +123,6 @@ func (sa *SemanticAnalyzer) collectStructDecl(sd *ast.StructDecl) {
 			Line:   field.Line(),
 			Column: field.Column(),
 		}
-		// Проверка на дубликат поля
 		if _, exists := fields[field.Name.Value]; exists {
 			sa.errors.Add(ErrDuplicateDeclaration,
 				fmt.Sprintf("field '%s' already declared in struct", field.Name.Value),
@@ -141,7 +144,7 @@ func (sa *SemanticAnalyzer) collectStructDecl(sd *ast.StructDecl) {
 	sa.symbolTable.Insert(sym)
 }
 
-func (sa *SemanticAnalyzer) collectGlobalVarDecl(vd *ast.VarDecl) {
+func (sa *SemanticAnalyzer) collectGlobalVarDecl(vd *ast.VarDeclNode) {
 	varName := vd.Name.Value
 	varType := sa.typeFromAST(vd.Type)
 
@@ -170,28 +173,40 @@ func (sa *SemanticAnalyzer) collectGlobalVarDecl(vd *ast.VarDecl) {
 	sa.symbolTable.Insert(sym)
 }
 
-func (sa *SemanticAnalyzer) analyzeProgram(program *ast.Program) {
+func (sa *SemanticAnalyzer) analyzeProgram(program *ast.ProgramNode) *ast.ProgramNode {
+	decoratedProgram := &ast.ProgramNode{
+		Declarations: make([]ast.DeclarationNode, 0),
+		LinePos:      program.LinePos,
+		ColumnPos:    program.ColumnPos,
+	}
+
 	for _, decl := range program.Declarations {
 		switch d := decl.(type) {
-		case *ast.FunctionDecl:
-			sa.analyzeFunction(d)
-		case *ast.StructDecl:
+		case *ast.FunctionDeclNode:
+			decoratedFunc := sa.analyzeFunction(d)
+			decoratedProgram.Declarations = append(decoratedProgram.Declarations, decoratedFunc)
+		case *ast.StructDeclNode:
 			sa.analyzeStruct(d)
-		case *ast.VarDecl:
+			decoratedProgram.Declarations = append(decoratedProgram.Declarations, d)
+		case *ast.VarDeclNode:
 			sa.analyzeGlobalVarDecl(d)
+			decoratedProgram.Declarations = append(decoratedProgram.Declarations, d)
 		}
 	}
+
+	return decoratedProgram
 }
 
-func (sa *SemanticAnalyzer) analyzeFunction(fd *ast.FunctionDecl) {
+func (sa *SemanticAnalyzer) analyzeFunction(fd *ast.FunctionDeclNode) *ast.FunctionDeclNode {
 	funcName := fd.Name.Value
 	sym := sa.symbolTable.Lookup(funcName)
 	if sym == nil {
-		return
+		return fd
 	}
 
 	sa.currentFunc = sym
 	sa.currentScope = "function " + funcName
+	sa.declaredInBlock = make(map[string]bool)
 
 	sa.symbolTable.EnterScope(funcName)
 
@@ -207,33 +222,43 @@ func (sa *SemanticAnalyzer) analyzeFunction(fd *ast.FunctionDecl) {
 			Line:   param.Name.Line(),
 			Column: param.Name.Column(),
 		}
-		// Проверка на дубликат параметра
 		if existing := sa.symbolTable.LookupLocal(param.Name.Value); existing != nil {
 			sa.errors.Add(ErrDuplicateDeclaration,
 				fmt.Sprintf("parameter '%s' already declared", param.Name.Value),
 				param.Name.Line(), param.Name.Column(), sa.currentScope)
 		}
 		sa.symbolTable.Insert(paramSym)
+		sa.declaredInBlock[param.Name.Value] = true
+	}
+
+	decoratedFunc := &ast.FunctionDeclNode{
+		Token:      fd.Token,
+		Name:       fd.Name,
+		Parameters: fd.Parameters,
+		ReturnType: fd.ReturnType,
 	}
 
 	if fd.Body != nil {
-		sa.analyzeBlockStmt(fd.Body, sym.Type.Return)
-	}
+		decoratedFunc.Body = sa.analyzeBlockStmt(fd.Body, sym.Type.Return)
 
-	if fd.Body != nil && !sym.Type.Return.IsVoid() {
-		if !sa.hasReturnStatement(fd.Body) {
-			sa.errors.Add(ErrInvalidReturn,
-				fmt.Sprintf("function '%s' must return a value of type %s", funcName, sym.Type.Return.String()),
-				fd.Line(), fd.Column(), sa.currentScope)
+		// Проверка возврата для non-void функций
+		if !sym.Type.Return.IsVoid() {
+			if !sa.hasReturnStatement(fd.Body) {
+				sa.errors.Add(ErrInvalidReturn,
+					fmt.Sprintf("function '%s' must return a value of type %s", funcName, sym.Type.Return.String()),
+					fd.Line(), fd.Column(), sa.currentScope)
+			}
 		}
 	}
 
 	sa.symbolTable.ExitScope()
 	sa.currentFunc = nil
 	sa.currentScope = "global"
+
+	return decoratedFunc
 }
 
-func (sa *SemanticAnalyzer) analyzeStruct(sd *ast.StructDecl) {
+func (sa *SemanticAnalyzer) analyzeStruct(sd *ast.StructDeclNode) {
 	structSym := sa.symbolTable.Lookup(sd.Name.Value)
 	if structSym == nil {
 		return
@@ -249,7 +274,7 @@ func (sa *SemanticAnalyzer) analyzeStruct(sd *ast.StructDecl) {
 	}
 }
 
-func (sa *SemanticAnalyzer) analyzeGlobalVarDecl(vd *ast.VarDecl) {
+func (sa *SemanticAnalyzer) analyzeGlobalVarDecl(vd *ast.VarDeclNode) {
 	sym := sa.symbolTable.Lookup(vd.Name.Value)
 	if sym == nil {
 		return
@@ -265,36 +290,44 @@ func (sa *SemanticAnalyzer) analyzeGlobalVarDecl(vd *ast.VarDecl) {
 	}
 }
 
-func (sa *SemanticAnalyzer) analyzeBlockStmt(block *ast.BlockStmt, expectedReturn *Type) *Type {
+func (sa *SemanticAnalyzer) analyzeBlockStmt(block *ast.BlockStmtNode, expectedReturn *Type) *ast.BlockStmtNode {
 	sa.symbolTable.EnterScope("block")
 	defer sa.symbolTable.ExitScope()
 
-	var lastType *Type
+	prevDeclared := sa.declaredInBlock
+	sa.declaredInBlock = make(map[string]bool)
+
+	decoratedBlock := &ast.BlockStmtNode{
+		Token:      block.Token,
+		Statements: make([]ast.StatementNode, 0),
+	}
 
 	for _, stmt := range block.Statements {
-		stmtType := sa.analyzeStatement(stmt, expectedReturn)
-		if stmtType != nil {
-			lastType = stmtType
+		decoratedStmt := sa.analyzeStatement(stmt, expectedReturn)
+		if decoratedStmt != nil {
+			decoratedBlock.Statements = append(decoratedBlock.Statements, decoratedStmt)
 		}
 	}
 
-	return lastType
+	sa.declaredInBlock = prevDeclared
+	return decoratedBlock
 }
 
-func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn *Type) *Type {
+func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.StatementNode, expectedReturn *Type) ast.StatementNode {
 	switch s := stmt.(type) {
-	case *ast.BlockStmt:
+	case *ast.BlockStmtNode:
 		return sa.analyzeBlockStmt(s, expectedReturn)
 
-	case *ast.VarDecl:
+	case *ast.VarDeclNode:
 		sa.collectLocalVarDecl(s)
 		sa.analyzeLocalVarDecl(s)
-		return nil
+		return s
 
-	case *ast.ExprStmt:
-		return sa.analyzeExpression(s.Expression)
+	case *ast.ExprStmtNode:
+		sa.analyzeExpression(s.Expression)
+		return s
 
-	case *ast.IfStmt:
+	case *ast.IfStmtNode:
 		condType := sa.analyzeExpression(s.Condition)
 		if condType != nil && !condType.IsBool() {
 			sa.errors.Add(ErrInvalidCondition,
@@ -305,15 +338,15 @@ func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn 
 		sa.analyzeBlockStmt(s.Consequence, expectedReturn)
 
 		if s.Alternative != nil {
-			if altBlock, ok := s.Alternative.(*ast.BlockStmt); ok {
+			if altBlock, ok := s.Alternative.(*ast.BlockStmtNode); ok {
 				sa.analyzeBlockStmt(altBlock, expectedReturn)
 			} else {
 				sa.analyzeStatement(s.Alternative, expectedReturn)
 			}
 		}
-		return nil
+		return s
 
-	case *ast.WhileStmt:
+	case *ast.WhileStmtNode:
 		oldInLoop := sa.inLoop
 		sa.inLoop = true
 
@@ -326,9 +359,9 @@ func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn 
 
 		sa.analyzeBlockStmt(s.Body, expectedReturn)
 		sa.inLoop = oldInLoop
-		return nil
+		return s
 
-	case *ast.ForStmt:
+	case *ast.ForStmtNode:
 		oldInLoop := sa.inLoop
 		sa.inLoop = true
 
@@ -351,14 +384,14 @@ func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn 
 
 		sa.analyzeBlockStmt(s.Body, expectedReturn)
 		sa.inLoop = oldInLoop
-		return nil
+		return s
 
-	case *ast.ReturnStmt:
+	case *ast.ReturnStmtNode:
 		if sa.currentFunc == nil {
 			sa.errors.Add(ErrInvalidReturn,
 				"return statement outside function",
 				s.Line(), s.Column(), sa.currentScope)
-			return nil
+			return s
 		}
 
 		expectedType := sa.currentFunc.Type.Return
@@ -369,7 +402,7 @@ func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn 
 					fmt.Sprintf("function returns %s, but no value provided", expectedType.String()),
 					s.Line(), s.Column(), sa.currentScope)
 			}
-			return expectedType
+			return s
 		}
 
 		retType := sa.analyzeExpression(s.RetValue)
@@ -378,14 +411,14 @@ func (sa *SemanticAnalyzer) analyzeStatement(stmt ast.Statement, expectedReturn 
 				fmt.Sprintf("cannot return %s, expected %s", retType.String(), expectedType.String()),
 				s.Line(), s.Column(), sa.currentScope)
 		}
-		return expectedType
+		return s
 
 	default:
-		return nil
+		return stmt
 	}
 }
 
-func (sa *SemanticAnalyzer) collectLocalVarDecl(vd *ast.VarDecl) {
+func (sa *SemanticAnalyzer) collectLocalVarDecl(vd *ast.VarDeclNode) {
 	varName := vd.Name.Value
 	varType := sa.typeFromAST(vd.Type)
 
@@ -412,9 +445,10 @@ func (sa *SemanticAnalyzer) collectLocalVarDecl(vd *ast.VarDecl) {
 	}
 
 	sa.symbolTable.Insert(sym)
+	sa.declaredInBlock[varName] = true
 }
 
-func (sa *SemanticAnalyzer) analyzeLocalVarDecl(vd *ast.VarDecl) {
+func (sa *SemanticAnalyzer) analyzeLocalVarDecl(vd *ast.VarDeclNode) {
 	sym := sa.symbolTable.LookupLocal(vd.Name.Value)
 	if sym == nil {
 		return
@@ -430,172 +464,193 @@ func (sa *SemanticAnalyzer) analyzeLocalVarDecl(vd *ast.VarDecl) {
 	}
 }
 
-func (sa *SemanticAnalyzer) analyzeExpression(expr ast.Expression) *Type {
+func (sa *SemanticAnalyzer) analyzeExpression(expr ast.ExpressionNode) *Type {
 	if expr == nil {
 		return nil
 	}
 
+	var exprType *Type
+
 	switch e := expr.(type) {
-	case *ast.Identifier:
+	case *ast.IdentifierNode:
 		sym := sa.symbolTable.Lookup(e.Value)
 		if sym == nil {
 			sa.errors.Add(ErrUndeclaredIdentifier,
 				fmt.Sprintf("identifier '%s' not declared", e.Value),
 				e.Line(), e.Column(), sa.currentScope)
-			return nil
+			exprType = nil
+		} else {
+			// Проверка use before declaration
+			if sym.Kind == SymbolVariable && !sa.declaredInBlock[e.Value] {
+				currentScope := sa.symbolTable.GetCurrentScope()
+				if sym.Scope == currentScope {
+					sa.errors.Add(ErrUseBeforeDeclaration,
+						fmt.Sprintf("variable '%s' used before declaration", e.Value),
+						e.Line(), e.Column(), sa.currentScope)
+				}
+			}
+			exprType = sym.Type
 		}
-		return sym.Type
+		e.SetType(typeToAnnotation(exprType))
 
-	case *ast.LiteralExpr:
-		switch e.Type {
+	case *ast.LiteralExprNode:
+		switch e.TypeName {
 		case "int":
-			return NewType(TypeInt)
+			exprType = NewType(TypeInt)
 		case "float":
-			return NewType(TypeFloat)
+			exprType = NewType(TypeFloat)
 		case "bool":
-			return NewType(TypeBool)
+			exprType = NewType(TypeBool)
 		case "string":
-			return NewType(TypeString)
-		default:
-			return nil
+			exprType = NewType(TypeString)
 		}
+		e.SetType(typeToAnnotation(exprType))
 
-	case *ast.BinaryExpr:
+	case *ast.BinaryExprNode:
 		leftType := sa.analyzeExpression(e.Left)
 		rightType := sa.analyzeExpression(e.Right)
 
 		if leftType == nil || rightType == nil {
-			return nil
+			exprType = nil
+		} else {
+			exprType = sa.checkBinaryOp(e.Operator, leftType, rightType, e.Line(), e.Column())
 		}
+		e.SetType(typeToAnnotation(exprType))
 
-		switch e.Operator {
-		case "+", "-", "*", "/", "%":
-			if leftType.IsNumeric() && rightType.IsNumeric() {
-				if leftType.IsFloat() || rightType.IsFloat() {
-					return NewType(TypeFloat)
-				}
-				return NewType(TypeInt)
-			}
-			sa.errors.Add(ErrInvalidBinaryOp,
-				fmt.Sprintf("operator %s requires numeric operands, got %s and %s", e.Operator, leftType.String(), rightType.String()),
-				e.Line(), e.Column(), sa.currentScope)
-			return nil
-
-		case "==", "!=", "<", "<=", ">", ">=":
-			if leftType.IsAssignableTo(rightType) || rightType.IsAssignableTo(leftType) {
-				return NewType(TypeBool)
-			}
-			sa.errors.Add(ErrInvalidBinaryOp,
-				fmt.Sprintf("cannot compare %s and %s", leftType.String(), rightType.String()),
-				e.Line(), e.Column(), sa.currentScope)
-			return nil
-
-		case "&&", "||":
-			if leftType.IsBool() && rightType.IsBool() {
-				return NewType(TypeBool)
-			}
-			sa.errors.Add(ErrInvalidBinaryOp,
-				fmt.Sprintf("operator %s requires bool operands, got %s and %s", e.Operator, leftType.String(), rightType.String()),
-				e.Line(), e.Column(), sa.currentScope)
-			return nil
-
-		default:
-			return nil
-		}
-
-	case *ast.UnaryExpr:
+	case *ast.UnaryExprNode:
 		rightType := sa.analyzeExpression(e.Right)
 		if rightType == nil {
-			return nil
+			exprType = nil
+		} else {
+			exprType = sa.checkUnaryOp(e.Operator, rightType, e.Line(), e.Column())
 		}
+		e.SetType(typeToAnnotation(exprType))
 
-		switch e.Operator {
-		case "-":
-			if rightType.IsNumeric() {
-				return rightType
-			}
-			sa.errors.Add(ErrInvalidUnaryOp,
-				fmt.Sprintf("operator - requires numeric operand, got %s", rightType.String()),
-				e.Line(), e.Column(), sa.currentScope)
-			return nil
-
-		case "!":
-			if rightType.IsBool() {
-				return NewType(TypeBool)
-			}
-			sa.errors.Add(ErrInvalidUnaryOp,
-				fmt.Sprintf("operator ! requires bool operand, got %s", rightType.String()),
-				e.Line(), e.Column(), sa.currentScope)
-			return nil
-
-		default:
-			return nil
-		}
-
-	case *ast.CallExpr:
+	case *ast.CallExprNode:
 		funcType := sa.analyzeExpression(e.Function)
 		if funcType == nil {
-			return nil
-		}
-
-		if !funcType.IsFunction() {
+			exprType = nil
+		} else if !funcType.IsFunction() {
 			sa.errors.Add(ErrFunctionNotFound,
 				fmt.Sprintf("'%s' is not a function", e.Function.String()),
 				e.Line(), e.Column(), sa.currentScope)
-			return nil
-		}
-
-		expectedParams := funcType.Params
-		if len(e.Arguments) != len(expectedParams) {
-			sa.errors.Add(ErrArgumentCount,
-				fmt.Sprintf("expected %d arguments, got %d", len(expectedParams), len(e.Arguments)),
-				e.Line(), e.Column(), sa.currentScope)
-			return funcType.Return
-		}
-
-		for i, arg := range e.Arguments {
-			argType := sa.analyzeExpression(arg)
-			if argType != nil && !argType.IsAssignableTo(expectedParams[i]) {
-				sa.errors.Add(ErrArgumentType,
-					fmt.Sprintf("argument %d: expected %s, got %s", i+1, expectedParams[i].String(), argType.String()),
-					arg.Line(), arg.Column(), sa.currentScope)
+			exprType = nil
+		} else {
+			// Проверка аргументов
+			expectedParams := funcType.Params
+			if len(e.Arguments) != len(expectedParams) {
+				sa.errors.Add(ErrArgumentCount,
+					fmt.Sprintf("expected %d arguments, got %d", len(expectedParams), len(e.Arguments)),
+					e.Line(), e.Column(), sa.currentScope)
 			}
+
+			for i, arg := range e.Arguments {
+				argType := sa.analyzeExpression(arg)
+				if i < len(expectedParams) && argType != nil && !argType.IsAssignableTo(expectedParams[i]) {
+					sa.errors.Add(ErrArgumentType,
+						fmt.Sprintf("argument %d: expected %s, got %s", i+1, expectedParams[i].String(), argType.String()),
+						arg.Line(), arg.Column(), sa.currentScope)
+				}
+			}
+
+			exprType = funcType.Return
 		}
+		e.SetType(typeToAnnotation(exprType))
 
-		return funcType.Return
-
-	case *ast.AssignmentExpr:
+	case *ast.AssignmentExprNode:
 		leftType := sa.analyzeExpression(e.Left)
 		rightType := sa.analyzeExpression(e.Right)
 
-		if leftType == nil || rightType == nil {
-			return nil
-		}
+		if leftType != nil && rightType != nil {
+			if ident, ok := e.Left.(*ast.IdentifierNode); ok {
+				sym := sa.symbolTable.Lookup(ident.Value)
+				if sym != nil && sym.Kind == SymbolFunction {
+					sa.errors.Add(ErrInvalidAssignment,
+						fmt.Sprintf("cannot assign to function '%s'", ident.Value),
+						e.Line(), e.Column(), sa.currentScope)
+				}
+			}
 
-		if ident, ok := e.Left.(*ast.Identifier); ok {
-			sym := sa.symbolTable.Lookup(ident.Value)
-			if sym != nil && sym.Kind == SymbolFunction {
-				sa.errors.Add(ErrInvalidAssignment,
-					fmt.Sprintf("cannot assign to function '%s'", ident.Value),
+			if !rightType.IsAssignableTo(leftType) {
+				sa.errors.Add(ErrTypeMismatch,
+					fmt.Sprintf("cannot assign %s to %s", rightType.String(), leftType.String()),
 					e.Line(), e.Column(), sa.currentScope)
-				return nil
 			}
 		}
+		exprType = leftType
+		e.SetType(typeToAnnotation(exprType))
+	}
 
-		if !rightType.IsAssignableTo(leftType) {
-			sa.errors.Add(ErrTypeMismatch,
-				fmt.Sprintf("cannot assign %s to %s", rightType.String(), leftType.String()),
-				e.Line(), e.Column(), sa.currentScope)
+	return exprType
+}
+
+func (sa *SemanticAnalyzer) checkBinaryOp(op string, left, right *Type, line, column int) *Type {
+	switch op {
+	case "+", "-", "*", "/", "%":
+		if left.IsNumeric() && right.IsNumeric() {
+			if left.IsFloat() || right.IsFloat() {
+				return NewType(TypeFloat)
+			}
+			return NewType(TypeInt)
 		}
+		sa.errors.Add(ErrInvalidBinaryOp,
+			fmt.Sprintf("operator %s requires numeric operands, got %s and %s", op, left.String(), right.String()),
+			line, column, sa.currentScope)
+		return nil
 
-		return leftType
+	case "==", "!=", "<", "<=", ">", ">=":
+		if left.IsAssignableTo(right) || right.IsAssignableTo(left) {
+			return NewType(TypeBool)
+		}
+		sa.errors.Add(ErrInvalidBinaryOp,
+			fmt.Sprintf("cannot compare %s and %s", left.String(), right.String()),
+			line, column, sa.currentScope)
+		return nil
+
+	case "&&", "||":
+		if left.IsBool() && right.IsBool() {
+			return NewType(TypeBool)
+		}
+		sa.errors.Add(ErrInvalidBinaryOp,
+			fmt.Sprintf("operator %s requires bool operands, got %s and %s", op, left.String(), right.String()),
+			line, column, sa.currentScope)
+		return nil
 
 	default:
 		return nil
 	}
 }
 
-func (sa *SemanticAnalyzer) typeFromAST(t ast.Type) *Type {
+func (sa *SemanticAnalyzer) checkUnaryOp(op string, operand *Type, line, column int) *Type {
+	switch op {
+	case "-":
+		if operand.IsNumeric() {
+			return operand
+		}
+		sa.errors.Add(ErrInvalidUnaryOp,
+			fmt.Sprintf("operator - requires numeric operand, got %s", operand.String()),
+			line, column, sa.currentScope)
+		return nil
+
+	case "!":
+		if operand.IsBool() {
+			return NewType(TypeBool)
+		}
+		sa.errors.Add(ErrInvalidUnaryOp,
+			fmt.Sprintf("operator ! requires bool operand, got %s", operand.String()),
+			line, column, sa.currentScope)
+		return nil
+
+	default:
+		return nil
+	}
+}
+
+func (sa *SemanticAnalyzer) typeFromAST(t *ast.TypeNode) *Type {
+	if t == nil {
+		return nil
+	}
+
 	switch t.Kind {
 	case "int":
 		return NewType(TypeInt)
@@ -621,18 +676,101 @@ func (sa *SemanticAnalyzer) typeFromAST(t ast.Type) *Type {
 	}
 }
 
-func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmt) bool {
-	for _, stmt := range block.Statements {
+// hasReturnStatement проверяет, гарантирует ли блок возврат значения
+func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmtNode) bool {
+	if block == nil {
+		return false
+	}
+
+	// Проверяем все statements с конца
+	for i := len(block.Statements) - 1; i >= 0; i-- {
+		stmt := block.Statements[i]
+
 		switch s := stmt.(type) {
-		case *ast.ReturnStmt:
+		case *ast.ReturnStmtNode:
 			return true
-		case *ast.BlockStmt:
+
+		case *ast.IfStmtNode:
+			// If с else  проверяем обе ветки
+			if s.Alternative != nil {
+				consHasRet := sa.blockHasReturnStmt(s.Consequence)
+				altHasRet := sa.blockHasReturnStmt(s.Alternative)
+				if consHasRet && altHasRet {
+					return true
+				}
+			}
+			// If без else  продолжаем проверку дальше
+			continue
+
+		case *ast.ForStmtNode:
+			// Бесконечный цикл for (;;) с return внутри
+			if s.Condition == nil && s.Update == nil {
+				if sa.blockHasReturnStmt(s.Body) {
+					return true
+				}
+			}
+			// Обычный for  не гарантирует возврат
+			continue
+
+		case *ast.WhileStmtNode:
+			// Бесконечный цикл while (true) с return внутри
+			if sa.isAlwaysTrue(s.Condition) {
+				if sa.blockHasReturnStmt(s.Body) {
+					return true
+				}
+			}
+			continue
+
+		case *ast.BlockStmtNode:
 			if sa.hasReturnStatement(s) {
 				return true
 			}
+
+		default:
+			return false
 		}
 	}
+
 	return false
+}
+
+// blockHasReturnStmt проверяет наличие return в блоке
+func (sa *SemanticAnalyzer) blockHasReturnStmt(stmt ast.StatementNode) bool {
+	if stmt == nil {
+		return false
+	}
+
+	switch s := stmt.(type) {
+	case *ast.BlockStmtNode:
+		return sa.hasReturnStatement(s)
+	case *ast.ReturnStmtNode:
+		return true
+	case *ast.IfStmtNode:
+		if s.Alternative == nil {
+			return false
+		}
+		return sa.blockHasReturnStmt(s.Consequence) && sa.blockHasReturnStmt(s.Alternative)
+	default:
+		return false
+	}
+}
+
+// isAlwaysTrue проверяет, является ли условие всегда истинным
+func (sa *SemanticAnalyzer) isAlwaysTrue(expr ast.ExpressionNode) bool {
+	if lit, ok := expr.(*ast.LiteralExprNode); ok {
+		return lit.TypeName == "bool" && lit.BoolValue
+	}
+	return false
+}
+
+func typeToAnnotation(t *Type) *ast.TypeAnnotation {
+	if t == nil {
+		return nil
+	}
+	return &ast.TypeAnnotation{
+		Kind: t.String(),
+		Name: t.Name,
+	}
 }
 
 func (sa *SemanticAnalyzer) GetSymbolTable() *SymbolTable {

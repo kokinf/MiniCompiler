@@ -1,0 +1,6 @@
+Program:
+  FunctionDecl: main -> int [line 1]:
+    Parameters:
+    Body:
+      VarDecl: int x = 42
+      Return: x

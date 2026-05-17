@@ -1,0 +1,27 @@
+function add: int (int a, int b)
+  ; Locals:
+  ;   a: int (offset 8, size 4)
+  ;   b: int (offset 16, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; param a: int
+  STORE [%t1], a
+  %t2 = ALLOCA 4  ; param b: int
+  STORE [%t2], b
+  %t3 = LOAD [%t1]
+  %t4 = LOAD [%t2]
+  %t5 = ADD %t3, %t4
+  RETURN %t5
+
+function main: int ()
+  ; Locals:
+  ;   result: int (offset 0, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var result: int
+  PARAM 0, 10
+  PARAM 1, 20
+  %t2 = CALL add(10, 20)
+  STORE [%t1], %t2
+  %t3 = LOAD [%t1]
+  RETURN %t3

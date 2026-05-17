@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"fmt"
+	"sort"
 )
 
 type SymbolKind string
@@ -139,7 +140,17 @@ func (st *SymbolTable) printScope(scope *Scope, indent int, result *string) {
 		prefix += "  "
 	}
 	*result += fmt.Sprintf("%s%s scope (level %d):\n", prefix, scope.name, scope.level)
-	for _, sym := range scope.GetAllSymbols() {
+
+	// Сортируем символы по имени для детерминированного вывода
+	symbols := scope.GetAllSymbols()
+	sort.Slice(symbols, func(i, j int) bool {
+		if symbols[i].Line != symbols[j].Line {
+			return symbols[i].Line < symbols[j].Line
+		}
+		return symbols[i].Name < symbols[j].Name
+	})
+
+	for _, sym := range symbols {
 		*result += fmt.Sprintf("%s  %s: %s %s (line %d)\n",
 			prefix, sym.Name, sym.Kind, sym.Type.String(), sym.Line)
 	}

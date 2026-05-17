@@ -7,7 +7,7 @@ Program:
         Condition:
           (n <= 1)
         Then:
-          Block [line 2-3]:
+          Block [line 2-2]:
             Return: n
       Return: (fibonacci((n - 1)) + fibonacci((n - 2)))
   FunctionDecl: main -> void [line 8]:

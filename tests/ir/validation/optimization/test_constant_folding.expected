@@ -1,0 +1,44 @@
+IR Statistics:
+================
+
+Functions:       1
+Basic Blocks:    1
+Instructions:    18
+Temporaries:     13
+Phi Nodes:       0
+Def-Use Chains:  13
+
+Instruction breakdown:
+  ALLOCA      : 4
+  MOVE        : 3
+  STORE       : 4
+  LOAD        : 4
+  ADD         : 2
+  RETURN      : 1
+
+function main: int ()
+  ; Locals:
+  ;   a: int (offset 0, size 4)
+  ;   b: int (offset 8, size 4)
+  ;   c: int (offset 16, size 4)
+  ;   d: int (offset 24, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; var a: int
+  %t2 = MOVE 30
+  STORE [%t1], %t2
+  %t3 = ALLOCA 4  ; var b: int
+  %t4 = MOVE 20
+  STORE [%t3], %t4
+  %t5 = ALLOCA 4  ; var c: int
+  %t6 = MOVE 20
+  STORE [%t5], %t6
+  %t7 = ALLOCA 4  ; var d: int
+  %t8 = LOAD [%t1]
+  %t9 = LOAD [%t3]
+  %t10 = ADD %t8, %t9
+  %t11 = LOAD [%t5]
+  %t12 = ADD %t10, %t11
+  STORE [%t7], %t12
+  %t13 = LOAD [%t7]
+  RETURN %t13

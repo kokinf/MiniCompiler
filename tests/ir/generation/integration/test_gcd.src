@@ -1,0 +1,12 @@
+fn gcd(int a, int b) -> int {
+    while (b != 0) {
+        int temp = b;
+        b = a % b;
+        a = temp;
+    }
+    return a;
+}
+
+fn main() -> int {
+    return gcd(48, 18);
+}

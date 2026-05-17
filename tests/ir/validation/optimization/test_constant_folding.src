@@ -1,0 +1,7 @@
+fn main() -> int {
+    int a = 10 + 20;
+    int b = 5 * 4;
+    int c = 100 / 5;
+    int d = a + b + c;
+    return d;
+}

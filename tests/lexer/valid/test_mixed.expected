@@ -18,7 +18,7 @@
 4:15 ASSIGN "="
 4:17 KW_TRUE "true" true
 4:21 SEMICOLON ";"
-5:5 IDENTIFIER "string"
+5:5 KW_STRING "string"
 5:12 IDENTIFIER "message"
 5:20 ASSIGN "="
 5:22 STRING_LITERAL "\"Hello\"" Hello
@@ -48,4 +48,3 @@
 13:12 INT_LITERAL "0" 0
 13:13 SEMICOLON ";"
 14:1 RBRACE "}"
-14:1 END_OF_FILE ""

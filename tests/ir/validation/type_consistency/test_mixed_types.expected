@@ -1,0 +1,34 @@
+function main: int ()
+  ; Locals:
+  ;   a: int (offset 0, size 4)
+  ;   b: float (offset 8, size 8)
+  ;   c: float (offset 16, size 8)
+  ;   d: bool (offset 24, size 1)
+
+entry:
+  %t1 = ALLOCA 4  ; var a: int
+  STORE [%t1], 10
+  %t2 = ALLOCA 8  ; var b: float
+  STORE [%t2], 3.14
+  %t3 = ALLOCA 8  ; var c: float
+  %t4 = LOAD [%t1]
+  %t5 = LOAD [%t2]
+  %t6 = ADD %t4, %t5
+  STORE [%t3], %t6
+  %t7 = ALLOCA 1  ; var d: bool
+  STORE [%t7], true
+  %t8 = LOAD [%t7]
+  JUMP_IF %t8, if_then_1
+  JUMP if_merge_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  STORE [%t1], 20
+  JUMP if_merge_2
+
+if_merge_2:
+  ; preds: entry, if_then_1
+  ; idom: entry
+  %t9 = LOAD [%t1]
+  RETURN %t9

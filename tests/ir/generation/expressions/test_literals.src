@@ -1,0 +1,9 @@
+fn main() -> int {
+    int a = 42;
+    float b = 3.14;
+    bool c = true;
+    bool d = false;
+    int e = 0;
+    int f = -100;
+    return a;
+}

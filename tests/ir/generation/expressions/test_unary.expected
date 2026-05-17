@@ -1,0 +1,29 @@
+function main: int ()
+  ; Locals:
+  ;   a: int (offset 0, size 4)
+  ;   b: int (offset 8, size 4)
+  ;   c: int (offset 16, size 4)
+  ;   d: bool (offset 24, size 1)
+  ;   e: bool (offset 32, size 1)
+
+entry:
+  %t1 = ALLOCA 4  ; var a: int
+  STORE [%t1], 10
+  %t2 = ALLOCA 4  ; var b: int
+  %t3 = LOAD [%t1]
+  %t4 = NEG %t3
+  STORE [%t2], %t4
+  %t5 = ALLOCA 4  ; var c: int
+  %t6 = LOAD [%t2]
+  %t7 = NEG %t6
+  STORE [%t5], %t7
+  %t8 = ALLOCA 1  ; var d: bool
+  STORE [%t8], true
+  %t9 = ALLOCA 1  ; var e: bool
+  %t10 = LOAD [%t8]
+  %t11 = NOT %t10
+  STORE [%t9], %t11
+  %t12 = LOAD [%t2]
+  %t13 = LOAD [%t5]
+  %t14 = ADD %t12, %t13
+  RETURN %t14

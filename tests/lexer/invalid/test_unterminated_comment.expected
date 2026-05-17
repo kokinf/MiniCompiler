@@ -3,4 +3,4 @@
 1:7 ASSIGN "="
 1:9 INT_LITERAL "42" 42
 1:11 SEMICOLON ";"
-5:1 END_OF_FILE ""
+2:1 ILLEGAL "Ошибка в 2:1: незакрытый многострочный комментарий"

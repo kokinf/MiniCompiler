@@ -1,0 +1,38 @@
+function fib: int (int n)
+  ; Locals:
+  ;   n: int (offset 8, size 4)
+
+entry:
+  %t1 = ALLOCA 4  ; param n: int
+  STORE [%t1], n
+  %t2 = LOAD [%t1]
+  %t3 = CMP_LE %t2, 1
+  JUMP_IF %t3, if_then_1
+  JUMP if_merge_2
+
+if_then_1:
+  ; preds: entry
+  ; idom: entry
+  %t4 = LOAD [%t1]
+  RETURN %t4
+
+if_merge_2:
+  ; preds: entry
+  ; idom: entry
+  %t5 = LOAD [%t1]
+  %t6 = SUB %t5, 1
+  PARAM 0, %t6
+  %t7 = CALL fib(%t6)
+  %t8 = LOAD [%t1]
+  %t9 = SUB %t8, 2
+  PARAM 0, %t9
+  %t10 = CALL fib(%t9)
+  %t11 = ADD %t7, %t10
+  RETURN %t11
+
+function main: int ()
+
+entry:
+  PARAM 0, 10
+  %t1 = CALL fib(10)
+  RETURN %t1

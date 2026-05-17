@@ -1,0 +1,10 @@
+fn main() -> int {
+    int a = 10;
+    float b = 3.14;
+    float c = a + b;
+    bool d = true;
+    if (d) {
+        a = 20;
+    }
+    return a;
+}
