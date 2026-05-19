@@ -1,3 +1,4 @@
+// src/cmd/compiler/main.go
 package main
 
 import (
@@ -7,6 +8,7 @@ import (
 	"strings"
 
 	"mikrocompiler/src/internal/ast"
+	"mikrocompiler/src/internal/codegen"
 	"mikrocompiler/src/internal/ir"
 	"mikrocompiler/src/internal/lexer"
 	"mikrocompiler/src/internal/parser"
@@ -47,9 +49,15 @@ func main() {
 	irOptimize := irCmd.Bool("optimize", false, "Применить базовые оптимизации")
 	irStats := irCmd.Bool("stats", false, "Показать статистику IR")
 
+	// Команда compile
+	compileCmd := flag.NewFlagSet("compile", flag.ExitOnError)
+	compileInput := compileCmd.String("input", "", "Входной исходный файл")
+	compileOutput := compileCmd.String("output", "", "Выходной файл с ассемблером")
+	compileTarget := compileCmd.String("target", "x86_64", "Целевая архитектура: x86_64")
+
 	// Команда test
 	testCmd := flag.NewFlagSet("test", flag.ExitOnError)
-	testType := testCmd.String("type", "all", "Тип тестов: all, lexer, parser, semantic, ir")
+	testType := testCmd.String("type", "all", "Тип тестов: all, lexer, parser, semantic, ir, codegen")
 
 	if len(os.Args) < 2 {
 		printUsage()
@@ -72,6 +80,9 @@ func main() {
 	case "ir":
 		irCmd.Parse(os.Args[2:])
 		runIRGenerator(*irInput, *irOutput, *irFormat, *irOptimize, *irStats)
+	case "compile":
+		compileCmd.Parse(os.Args[2:])
+		runCompiler(*compileInput, *compileOutput, *compileTarget)
 	case "test":
 		testCmd.Parse(os.Args[2:])
 		runTests(*testType)
@@ -91,7 +102,7 @@ func printUsage() {
 	fmt.Println("  check   --input <файл> [--output <файл>] [--verbose] [--show-types]")
 	fmt.Println("  symbols --input <файл> [--format text|json]")
 	fmt.Println("  ir      --input <файл> [--output <файл>] [--format text|dot|json] [--optimize] [--stats]")
-	fmt.Println("  test    [--type all|lexer|parser|semantic|ir]")
+	fmt.Println("  compile --input <файл> [--output <файл>] [--target x86_64]")
 }
 
 func runLexer(inputFile, outputFile string) {
@@ -463,11 +474,102 @@ func runIRGenerator(inputFile, outputFile, format string, optimize, showStats bo
 	}
 }
 
+func runCompiler(inputFile, outputFile, target string) {
+	if inputFile == "" {
+		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
+		os.Exit(1)
+	}
+
+	if target != "x86_64" {
+		fmt.Fprintf(os.Stderr, "Ошибка: неподдерживаемая архитектура '%s'. Поддерживается только x86_64\n", target)
+		os.Exit(1)
+	}
+
+	content, err := os.ReadFile(inputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Лексер
+	scanner := lexer.NewScanner(string(content))
+	var tokens []mytoken.Token
+
+	for !scanner.IsAtEnd() {
+		tok := scanner.NextToken()
+		tokens = append(tokens, tok)
+		if tok.Type == mytoken.EOF {
+			break
+		}
+	}
+
+	hasLexErrors := false
+	for _, tok := range tokens {
+		if tok.Type == mytoken.ILLEGAL {
+			fmt.Fprintf(os.Stderr, "Лексическая ошибка: %s\n", tok.Lexeme)
+			hasLexErrors = true
+		}
+	}
+	if hasLexErrors {
+		os.Exit(1)
+	}
+
+	// Парсер
+	p := parser.NewParser(tokens)
+	program := p.Parse()
+
+	if len(p.Errors()) > 0 {
+		fmt.Fprintln(os.Stderr, "Ошибки парсинга:")
+		for _, err := range p.Errors() {
+			fmt.Fprintf(os.Stderr, "  %s\n", err)
+		}
+		os.Exit(1)
+	}
+
+	if program == nil {
+		fmt.Fprintln(os.Stderr, "Ошибка: не удалось распарсить программу")
+		os.Exit(1)
+	}
+
+	// Семантический анализ
+	analyzer := semantic.NewSemanticAnalyzer()
+	symbolTable, errors, decoratedAST := analyzer.Analyze(program)
+
+	if len(errors.Errors()) > 0 {
+		fmt.Fprintln(os.Stderr, "Семантические ошибки:")
+		fmt.Fprint(os.Stderr, errors.String())
+		os.Exit(1)
+	}
+
+	// Генерация IR
+	typeSystem := semantic.NewTypeSystem()
+	irGenerator := ir.NewIRGenerator(symbolTable, typeSystem)
+	irProgram := irGenerator.Generate(decoratedAST)
+
+	// Генерация x86-64 ассемблера
+	codeGenerator := codegen.NewX86Generator(irProgram, symbolTable, typeSystem)
+	asmCode := codeGenerator.Generate()
+
+	if outputFile != "" {
+		err = os.WriteFile(outputFile, []byte(asmCode), 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка записи: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("Ассемблерный код записан в %s\n", outputFile)
+		fmt.Println()
+		fmt.Println("Для сборки исполняемого файла выполните:")
+		fmt.Println("  nasm -f elf64 -o runtime.o src/runtime/runtime.asm")
+		fmt.Printf("  nasm -f elf64 -o program.o %s\n", outputFile)
+		fmt.Println("  ld -o program runtime.o program.o")
+	} else {
+		fmt.Print(asmCode)
+	}
+}
+
 func runTests(testType string) {
 	fmt.Printf(" Запуск тестов: %s \n\n", testType)
 
-	// Здесь будет вызов тестов через test runner
-	// Пока выводим заглушку
 	fmt.Println("Для запуска тестов используйте: make test")
 	fmt.Println("Или запустите скрипт: tests/test_runner/run_tests.sh")
 }

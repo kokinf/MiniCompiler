@@ -29,10 +29,13 @@ for_body_2:
 for_update_3:
   ; preds: for_body_2
   ; idom: for_body_2
+  %t8 = LOAD [%t2]
+  %t9 = ADD %t8, 1
+  STORE [%t2], %t9
   JUMP for_header_1
 
 for_exit_4:
   ; preds: for_header_1
   ; idom: for_header_1
-  %t8 = LOAD [%t1]
-  RETURN %t8
+  %t10 = LOAD [%t1]
+  RETURN %t10

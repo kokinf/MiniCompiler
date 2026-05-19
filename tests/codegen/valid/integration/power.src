@@ -1,0 +1,13 @@
+fn power(base int, exp int) -> int {
+    int result = 1;
+    int i = 0;
+    while (i < exp) {
+        result = result * base;
+        i = i + 1;
+    }
+    return result;
+}
+
+fn main() -> int {
+    return power(2, 8);
+}

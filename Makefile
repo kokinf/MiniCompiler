@@ -192,6 +192,40 @@ test-all: build test-go
 	fi
 
 # ============================================================================
+# Golden testing
+# ============================================================================
+
+.PHONY: golden-generate
+golden-generate: build
+	@echo "$(YELLOW)Генерация golden testing файлов...$(NC)"
+	@bash scripts/generate_golden_ir.sh
+	@echo "$(GREEN)Golden testing файлы сгенерированы$(NC)"
+
+.PHONY: golden-update
+golden-update: build
+	@echo "$(YELLOW)Обновление golden testing файлов...$(NC)"
+	@bash scripts/update_golden.sh update
+	@echo "$(GREEN)Golden testing файлы обновлены$(NC)"
+
+.PHONY: golden-check
+golden-check: build
+	@echo "$(YELLOW)Проверка golden testing файлов...$(NC)"
+	@bash scripts/update_golden.sh check verbose
+	@echo "$(GREEN)Проверка завершена$(NC)"
+
+.PHONY: golden-validate
+golden-validate:
+	@echo "$(YELLOW)Валидация структуры golden testing файлов...$(NC)"
+	@bash scripts/validate_golden.sh
+	@echo "$(GREEN)Валидация завершена$(NC)"
+
+.PHONY: golden-clean
+golden-clean:
+	@echo "$(YELLOW)Очистка golden testing файлов...$(NC)"
+	@bash scripts/generate_golden_ir.sh --clean
+	@echo "$(GREEN)Golden testing файлы удалены$(NC)"
+
+# ============================================================================
 # Управление зависимостями
 # ============================================================================
 
@@ -217,7 +251,7 @@ clean:
 	@echo "$(YELLOW)Очистка артефактов сборки...$(NC)"
 	-$(RM) $(OUTPUT_FULL)
 	-$(RMDIR) $(OUTPUT_DIR)
-	-$(RM) cfg.dot cfg.png *.ir
+	-$(RM) cfg.dot cfg.png ast.dot ast.png *.ir
 	$(GO) clean
 	@echo "$(GREEN)Очистка завершена$(NC)"
 
@@ -242,6 +276,38 @@ vet:
 	@echo "$(YELLOW)Проверка кода статическим анализатором...$(NC)"
 	$(GO) vet ./...
 	@echo "$(GREEN)Проверка завершена$(NC)"
+
+.PHONY: lint
+lint: vet
+	@echo "$(YELLOW)Запуск линтера...$(NC)"
+	@which golint > /dev/null && golint ./... || echo "golint не установлен"
+
+# ============================================================================
+# Генерация AST изображений
+# ============================================================================
+
+.PHONY: generate-ast-png
+generate-ast-png: build
+	@echo "$(YELLOW)Генерация AST для examples/factorial.src...$(NC)"
+	$(OUTPUT_FULL) parse --input examples/factorial.src --format dot --output ast.dot
+	@if command -v dot > /dev/null; then \
+		dot -Tpng ast.dot -o ast.png; \
+		echo "$(GREEN)AST сохранён в ast.png$(NC)"; \
+	fi
+
+.PHONY: generate-all-asts
+generate-all-asts: build
+	@echo "$(YELLOW)Генерация AST для всех примеров...$(NC)"
+	@for srcfile in examples/*.src; do \
+		name=$$(basename "$$srcfile" .src); \
+		echo "  $$srcfile -> ast_$$name.dot"; \
+		$(OUTPUT_FULL) parse --input "$$srcfile" --format dot --output "ast_$$name.dot"; \
+		if command -v dot > /dev/null; then \
+			dot -Tpng "ast_$$name.dot" -o "ast_$$name.png"; \
+			echo "  ast_$$name.png создан"; \
+		fi \
+	done
+	@echo "$(GREEN)Все AST сгенерированы$(NC)"
 
 # ============================================================================
 # Установка и запуск
@@ -279,16 +345,43 @@ help:
 	@echo ""
 	@echo "$(YELLOW)Генерация IR:$(NC)"
 	@echo "  make ir              - Сгенерировать IR для factorial.src"
+	@echo "  make ir-opt          - Сгенерировать оптимизированный IR"
 	@echo "  make ir-dot          - Сгенерировать CFG в PNG"
 	@echo "  make ir-json         - Сгенерировать IR в JSON"
 	@echo "  make ir-stats        - Показать статистику IR"
 	@echo ""
 	@echo "$(YELLOW)Тестирование:$(NC)"
 	@echo "  make test            - Запустить все тесты"
+	@echo "  make test-lexer      - Запустить только тесты лексера"
+	@echo "  make test-parser     - Запустить только тесты парсера"
+	@echo "  make test-semantic   - Запустить только семантические тесты"
+	@echo "  make test-ir         - Запустить тесты IR"
+	@echo "  make test-go         - Запустить Go unit тесты"
+	@echo "  make test-all        - Запустить все тесты (unit + integration)"
+	@echo ""
+	@echo "$(YELLOW)Golden testing:$(NC)"
+	@echo "  make golden-generate - Сгенерировать expected файлы"
+	@echo "  make golden-update   - Обновить expected файлы"
+	@echo "  make golden-check    - Проверить expected файлы"
+	@echo "  make golden-validate - Валидировать структуру"
+	@echo "  make golden-clean    - Удалить expected файлы"
+	@echo ""
+	@echo "$(YELLOW)Генерация изображений AST:$(NC)"
+	@echo "  make generate-ast-png   - Сгенерировать PNG для factorial.src"
+	@echo "  make generate-all-asts  - Сгенерировать PNG для всех примеров"
+	@echo ""
+	@echo "$(YELLOW)Качество кода:$(NC)"
+	@echo "  make fmt              - Форматировать код"
+	@echo "  make vet              - Запустить статический анализатор"
+	@echo "  make lint             - Запустить линтер"
+	@echo ""
+	@echo "$(YELLOW)Управление зависимостями:$(NC)"
+	@echo "  make deps             - Загрузить зависимости"
+	@echo "  make tidy             - Очистить зависимости"
 	@echo ""
 	@echo "$(YELLOW)Очистка:$(NC)"
-	@echo "  make clean           - Очистить артефакты сборки"
-	@echo "  make clean-all       - Полная очистка (включая кэш Go)"
+	@echo "  make clean            - Очистить артефакты сборки"
+	@echo "  make clean-all        - Полная очистка (включая кэш Go)"
 
 # ============================================================================
 # Специфичные для Windows настройки

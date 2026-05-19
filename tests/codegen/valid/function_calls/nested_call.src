@@ -1,0 +1,11 @@
+fn add(a int, b int) -> int {
+    return a + b;
+}
+
+fn double(x int) -> int {
+    return add(x, x);
+}
+
+fn main() -> int {
+    return double(21);
+}

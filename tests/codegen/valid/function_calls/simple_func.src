@@ -1,0 +1,7 @@
+fn get_number() -> int {
+    return 42;
+}
+
+fn main() -> int {
+    return get_number();
+}

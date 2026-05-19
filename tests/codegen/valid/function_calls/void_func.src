@@ -1,0 +1,7 @@
+fn set_value() -> int {
+    return 99;
+}
+
+fn main() -> int {
+    return set_value();
+}

@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> bool (line 1)
 
 
- Ошибки 
+=== Ошибки ===
 invalid_return: cannot return int, expected bool
   --> line 2, column 5
   |

@@ -1,3 +1,4 @@
+// src/internal/ir/generator.go
 package ir
 
 import (
@@ -376,7 +377,7 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	updateBlock := g.currentFunc.NewBlock(g.newLabel("for_update"))
 	exitBlock := g.currentFunc.NewBlock(g.newLabel("for_exit"))
 
-	// Сохраняем цели
+	// Сохраняем цели для break/continue
 	g.breakTargets = append(g.breakTargets, exitBlock)
 	g.continueTargets = append(g.continueTargets, updateBlock)
 
@@ -415,7 +416,12 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	// Обновление
 	g.currentBlock = updateBlock
 	if fs.Update != nil {
-		g.generateExpression(fs.Update)
+		// Создаём ExprStmtNode для обновления и генерируем как statement
+		updateStmt := &ast.ExprStmtNode{
+			Token:      fs.Token,
+			Expression: fs.Update,
+		}
+		g.generateStatement(updateStmt)
 	}
 	g.currentBlock.AddInstruction(NewJumpInst(headerBlock))
 	g.currentBlock.AddSuccessor(headerBlock)
@@ -471,6 +477,8 @@ func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 		return g.generateUnaryExpr(e)
 	case *ast.CallExprNode:
 		return g.generateCallExpr(e)
+	case *ast.AssignmentExprNode:
+		return g.generateAssignmentExpr(e)
 	default:
 		return nil
 	}
@@ -593,13 +601,14 @@ func (g *IRGenerator) generateCallExpr(ce *ast.CallExprNode) *Operand {
 		return nil
 	}
 
-	// Генерируем аргументы
+	// Генерируем аргументы и PARAM инструкции
 	args := make([]*Operand, len(ce.Arguments))
 	for i, arg := range ce.Arguments {
 		args[i] = g.generateExpression(arg)
 		if args[i] == nil {
 			return nil
 		}
+		// Добавляем PARAM инструкцию для каждого аргумента
 		g.currentBlock.AddInstruction(&Instruction{
 			Opcode: OpParam,
 			Src1:   NewLiteralOperand(i),
@@ -610,6 +619,26 @@ func (g *IRGenerator) generateCallExpr(ce *ast.CallExprNode) *Operand {
 	temp := g.currentFunc.NewTemp()
 	g.currentBlock.AddInstruction(NewCallInst(temp, funcName, args))
 	return temp
+}
+
+// generateAssignmentExpr генерирует выражение присваивания
+func (g *IRGenerator) generateAssignmentExpr(ae *ast.AssignmentExprNode) *Operand {
+	rightVal := g.generateExpression(ae.Right)
+	if rightVal == nil {
+		return nil
+	}
+
+	if ident, ok := ae.Left.(*ast.IdentifierNode); ok {
+		if addr, exists := g.varAddresses[ident.Value]; exists {
+			g.currentBlock.AddInstruction(NewStoreInst(addr, rightVal))
+			return rightVal
+		} else {
+			g.currentBlock.AddInstruction(NewStoreInst(NewGlobalOperand(ident.Value), rightVal))
+			return rightVal
+		}
+	}
+
+	return rightVal
 }
 
 // GetProgram возвращает сгенерированную программу
