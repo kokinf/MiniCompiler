@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
-=== Ошибки ===
+ Ошибки 
 duplicate_declaration: variable 'x' already declared in this scope at line 2
   --> line 3, column 5
   |

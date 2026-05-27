@@ -19,8 +19,6 @@ while_header_1:
   JUMP while_exit_3
 
 while_body_2:
-  ; preds: while_header_1
-  ; idom: while_header_1
   %t5 = ALLOCA 4  ; var temp: int
   %t6 = LOAD [%t2]
   STORE [%t5], %t6
@@ -33,8 +31,6 @@ while_body_2:
   JUMP while_header_1
 
 while_exit_3:
-  ; preds: while_header_1
-  ; idom: while_header_1
   %t11 = LOAD [%t1]
   RETURN %t11
 

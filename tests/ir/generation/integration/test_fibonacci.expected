@@ -11,14 +11,10 @@ entry:
   JUMP if_merge_2
 
 if_then_1:
-  ; preds: entry
-  ; idom: entry
   %t4 = LOAD [%t1]
   RETURN %t4
 
 if_merge_2:
-  ; preds: entry
-  ; idom: entry
   %t5 = LOAD [%t1]
   %t6 = SUB %t5, 1
   PARAM 0, %t6

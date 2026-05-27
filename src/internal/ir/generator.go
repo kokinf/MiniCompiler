@@ -1,4 +1,3 @@
-// src/internal/ir/generator.go
 package ir
 
 import (
@@ -28,6 +27,9 @@ type IRGenerator struct {
 
 	// Для PHI узлов
 	mergeBlocks map[string]*BasicBlock
+
+	// Для short-circuit выражений
+	inShortCircuit bool
 }
 
 // NewIRGenerator создает новый генератор IR
@@ -41,6 +43,7 @@ func NewIRGenerator(symbolTable *semantic.SymbolTable, typeSystem *semantic.Type
 		varAddresses:    make(map[string]*Operand),
 		labelCounter:    0,
 		mergeBlocks:     make(map[string]*BasicBlock),
+		inShortCircuit:  false,
 	}
 }
 
@@ -59,6 +62,7 @@ func (g *IRGenerator) Generate(program *ast.ProgramNode) *Program {
 		case *ast.FunctionDeclNode:
 			g.generateFunction(d)
 		case *ast.StructDeclNode:
+			// Структуры только декларируются, не генерируют код
 		}
 	}
 
@@ -230,13 +234,8 @@ func (g *IRGenerator) generateVarDecl(vd *ast.VarDeclNode) {
 	}
 }
 
-// generateIfStmt генерирует if оператор с PHI узлами
+// generateIfStmt генерирует if оператор с поддержкой short-circuit
 func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
-	condVal := g.generateExpression(is.Condition)
-	if condVal == nil {
-		return
-	}
-
 	thenBlock := g.currentFunc.NewBlock(g.newLabel("if_then"))
 	var elseBlock *BasicBlock
 	if is.Alternative != nil {
@@ -250,23 +249,24 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 		savedVarAddresses[k] = v
 	}
 
-	// Условный переход
-	g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, condVal, thenBlock))
-	if elseBlock != nil {
-		g.currentBlock.AddInstruction(NewJumpInst(elseBlock))
+	// Генерируем условие с short-circuit поддержкой
+	if is.Alternative != nil {
+		g.generateCondition(is.Condition, thenBlock, elseBlock)
 	} else {
-		g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
+		g.generateCondition(is.Condition, thenBlock, mergeBlock)
 	}
 
 	// Связываем блоки
-	g.currentBlock.AddSuccessor(thenBlock)
-	thenBlock.AddPredecessor(g.currentBlock)
-	if elseBlock != nil {
-		g.currentBlock.AddSuccessor(elseBlock)
-		elseBlock.AddPredecessor(g.currentBlock)
-	} else {
-		g.currentBlock.AddSuccessor(mergeBlock)
-		mergeBlock.AddPredecessor(g.currentBlock)
+	if !g.currentBlock.IsTerminated() {
+		g.currentBlock.AddSuccessor(thenBlock)
+		thenBlock.AddPredecessor(g.currentBlock)
+		if elseBlock != nil {
+			g.currentBlock.AddSuccessor(elseBlock)
+			elseBlock.AddPredecessor(g.currentBlock)
+		} else {
+			g.currentBlock.AddSuccessor(mergeBlock)
+			mergeBlock.AddPredecessor(g.currentBlock)
+		}
 	}
 
 	// Then блок
@@ -322,7 +322,7 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 	}
 }
 
-// generateWhileStmt генерирует while оператор
+// generateWhileStmt генерирует while оператор с поддержкой short-circuit
 func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 	headerBlock := g.currentFunc.NewBlock(g.newLabel("while_header"))
 	bodyBlock := g.currentFunc.NewBlock(g.newLabel("while_body"))
@@ -337,12 +337,11 @@ func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 	g.currentBlock.AddSuccessor(headerBlock)
 	headerBlock.AddPredecessor(g.currentBlock)
 
-	// Заголовок - проверка условия
+	// Заголовок - проверка условия с short-circuit
 	g.currentBlock = headerBlock
-	condVal := g.generateExpression(ws.Condition)
-	if condVal != nil {
-		g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, condVal, bodyBlock))
-		g.currentBlock.AddInstruction(NewJumpInst(exitBlock))
+	g.generateCondition(ws.Condition, bodyBlock, exitBlock)
+
+	if !g.currentBlock.IsTerminated() {
 		g.currentBlock.AddSuccessor(bodyBlock)
 		g.currentBlock.AddSuccessor(exitBlock)
 		bodyBlock.AddPredecessor(g.currentBlock)
@@ -365,7 +364,7 @@ func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 	g.currentBlock = exitBlock
 }
 
-// generateForStmt генерирует for оператор
+// generateForStmt генерирует for оператор с поддержкой short-circuit
 func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	// Инициализация
 	if fs.Init != nil {
@@ -386,13 +385,11 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	g.currentBlock.AddSuccessor(headerBlock)
 	headerBlock.AddPredecessor(g.currentBlock)
 
-	// Заголовок - проверка условия
+	// Заголовок - проверка условия с short-circuit
 	g.currentBlock = headerBlock
 	if fs.Condition != nil {
-		condVal := g.generateExpression(fs.Condition)
-		if condVal != nil {
-			g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, condVal, bodyBlock))
-			g.currentBlock.AddInstruction(NewJumpInst(exitBlock))
+		g.generateCondition(fs.Condition, bodyBlock, exitBlock)
+		if !g.currentBlock.IsTerminated() {
 			g.currentBlock.AddSuccessor(bodyBlock)
 			g.currentBlock.AddSuccessor(exitBlock)
 			bodyBlock.AddPredecessor(g.currentBlock)
@@ -434,6 +431,52 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	g.currentBlock = exitBlock
 }
 
+// generateCondition генерирует условный переход с short-circuit для && и ||
+func (g *IRGenerator) generateCondition(expr ast.ExpressionNode, trueBlock, falseBlock *BasicBlock) {
+	if binExpr, ok := expr.(*ast.BinaryExprNode); ok {
+		switch binExpr.Operator {
+		case "&&":
+			// Для A && B:
+			// Если A ложно -> falseBlock
+			// Иначе проверяем B -> trueBlock/falseBlock
+			midBlock := g.currentFunc.NewBlock(g.newLabel("sc_and"))
+			g.generateCondition(binExpr.Left, midBlock, falseBlock)
+
+			if !g.currentBlock.IsTerminated() {
+				g.currentBlock.AddSuccessor(midBlock)
+				midBlock.AddPredecessor(g.currentBlock)
+			}
+
+			g.currentBlock = midBlock
+			g.generateCondition(binExpr.Right, trueBlock, falseBlock)
+			return
+
+		case "||":
+			// Для A || B:
+			// Если A истинно -> trueBlock
+			// Иначе проверяем B -> trueBlock/falseBlock
+			midBlock := g.currentFunc.NewBlock(g.newLabel("sc_or"))
+			g.generateCondition(binExpr.Left, trueBlock, midBlock)
+
+			if !g.currentBlock.IsTerminated() {
+				g.currentBlock.AddSuccessor(midBlock)
+				midBlock.AddPredecessor(g.currentBlock)
+			}
+
+			g.currentBlock = midBlock
+			g.generateCondition(binExpr.Right, trueBlock, falseBlock)
+			return
+		}
+	}
+
+	// Для остальных выражений: вычисляем и делаем условный переход
+	val := g.generateExpression(expr)
+	if val != nil {
+		g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, val, trueBlock))
+		g.currentBlock.AddInstruction(NewJumpInst(falseBlock))
+	}
+}
+
 // generateReturnStmt генерирует return оператор
 func (g *IRGenerator) generateReturnStmt(rs *ast.ReturnStmtNode) {
 	var retVal *Operand
@@ -472,7 +515,15 @@ func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 	case *ast.IdentifierNode:
 		return g.generateIdentifier(e)
 	case *ast.BinaryExprNode:
-		return g.generateBinaryExpr(e)
+		// Обрабатываем && и || специально для short-circuit
+		switch e.Operator {
+		case "&&":
+			return g.generateLogicalAnd(e)
+		case "||":
+			return g.generateLogicalOr(e)
+		default:
+			return g.generateBinaryExpr(e)
+		}
 	case *ast.UnaryExprNode:
 		return g.generateUnaryExpr(e)
 	case *ast.CallExprNode:
@@ -482,6 +533,98 @@ func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 	default:
 		return nil
 	}
+}
+
+// generateLogicalAnd генерирует short-circuit evaluation для &&
+func (g *IRGenerator) generateLogicalAnd(be *ast.BinaryExprNode) *Operand {
+	// Вычисляем левую часть
+	leftVal := g.generateExpression(be.Left)
+	if leftVal == nil {
+		return nil
+	}
+
+	result := g.currentFunc.NewTemp()
+	rightBlock := g.currentFunc.NewBlock(g.newLabel("and_right"))
+	mergeBlock := g.currentFunc.NewBlock(g.newLabel("and_merge"))
+
+	// Если левая часть false, результат = false (short-circuit)
+	g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIfNot, leftVal, mergeBlock))
+	g.currentBlock.AddInstruction(NewMoveInst(result, NewLiteralOperand(false)))
+	g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
+
+	// Связываем блоки
+	g.currentBlock.AddSuccessor(mergeBlock)
+	mergeBlock.AddPredecessor(g.currentBlock)
+
+	// Правая часть вычисляется только если левая true
+	g.currentBlock = rightBlock
+	rightVal := g.generateExpression(be.Right)
+	if rightVal == nil {
+		return nil
+	}
+
+	if !g.currentBlock.IsTerminated() {
+		g.currentBlock.AddInstruction(NewMoveInst(result, rightVal))
+		g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
+		g.currentBlock.AddSuccessor(mergeBlock)
+		mergeBlock.AddPredecessor(g.currentBlock)
+	}
+
+	// PHI узел в merge блоке для корректного SSA
+	g.currentBlock = mergeBlock
+	phiPairs := []PhiPair{
+		{Value: NewLiteralOperand(false), Block: mergeBlock.Predecessors[0]},
+		{Value: rightVal, Block: rightBlock},
+	}
+	g.currentBlock.AddInstruction(NewPhiInst(result, phiPairs))
+
+	return result
+}
+
+// generateLogicalOr генерирует short-circuit evaluation для ||
+func (g *IRGenerator) generateLogicalOr(be *ast.BinaryExprNode) *Operand {
+	// Вычисляем левую часть
+	leftVal := g.generateExpression(be.Left)
+	if leftVal == nil {
+		return nil
+	}
+
+	result := g.currentFunc.NewTemp()
+	rightBlock := g.currentFunc.NewBlock(g.newLabel("or_right"))
+	mergeBlock := g.currentFunc.NewBlock(g.newLabel("or_merge"))
+
+	// Если левая часть true, результат = true (short-circuit)
+	g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, leftVal, mergeBlock))
+	g.currentBlock.AddInstruction(NewMoveInst(result, NewLiteralOperand(true)))
+	g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
+
+	// Связываем блоки
+	g.currentBlock.AddSuccessor(mergeBlock)
+	mergeBlock.AddPredecessor(g.currentBlock)
+
+	// Правая часть вычисляется только если левая false
+	g.currentBlock = rightBlock
+	rightVal := g.generateExpression(be.Right)
+	if rightVal == nil {
+		return nil
+	}
+
+	if !g.currentBlock.IsTerminated() {
+		g.currentBlock.AddInstruction(NewMoveInst(result, rightVal))
+		g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
+		g.currentBlock.AddSuccessor(mergeBlock)
+		mergeBlock.AddPredecessor(g.currentBlock)
+	}
+
+	// PHI узел в merge блоке
+	g.currentBlock = mergeBlock
+	phiPairs := []PhiPair{
+		{Value: NewLiteralOperand(true), Block: mergeBlock.Predecessors[0]},
+		{Value: rightVal, Block: rightBlock},
+	}
+	g.currentBlock.AddInstruction(NewPhiInst(result, phiPairs))
+
+	return result
 }
 
 // generateLiteral генерирует литерал
@@ -522,7 +665,7 @@ func (g *IRGenerator) generateIdentifier(ident *ast.IdentifierNode) *Operand {
 	return temp
 }
 
-// generateBinaryExpr генерирует бинарное выражение
+// generateBinaryExpr генерирует бинарное выражение (кроме && и ||)
 func (g *IRGenerator) generateBinaryExpr(be *ast.BinaryExprNode) *Operand {
 	left := g.generateExpression(be.Left)
 	right := g.generateExpression(be.Right)
@@ -557,10 +700,6 @@ func (g *IRGenerator) generateBinaryExpr(be *ast.BinaryExprNode) *Operand {
 		op = OpCmpGt
 	case ">=":
 		op = OpCmpGe
-	case "&&":
-		op = OpAnd
-	case "||":
-		op = OpOr
 	default:
 		return nil
 	}

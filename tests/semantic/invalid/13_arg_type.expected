@@ -4,7 +4,7 @@ global scope (level 0):
   main: function function -> int (line 5)
 
 
-=== Ошибки ===
+ Ошибки 
 argument_type_mismatch: argument 2: expected int, got float
   --> line 6, column 19
   |

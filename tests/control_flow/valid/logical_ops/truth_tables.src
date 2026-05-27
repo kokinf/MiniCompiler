@@ -1,0 +1,13 @@
+fn main() -> int {
+    int result = 0;
+    int t = 1;
+    int f = 0;
+    if (t == 1 && t == 1) { result = result + 1; }
+    if (t == 1 && f == 1) { result = result + 2; }
+    if (f == 1 && t == 1) { result = result + 4; }
+    if (f == 1 && f == 1) { result = result + 8; }
+    if (t == 1 || t == 1) { result = result + 16; }
+    if (t == 1 || f == 1) { result = result + 32; }
+    if (f == 1 || t == 1) { result = result + 64; }
+    return result;
+}

@@ -9,12 +9,12 @@ Phi Nodes:       0
 Def-Use Chains:  21
 
 Instruction breakdown:
-  STORE       : 6
   LOAD        : 8
   MOVE        : 5
   ADD         : 2
   RETURN      : 1
   ALLOCA      : 6
+  STORE       : 6
 
 function main: int ()
   ; Locals:

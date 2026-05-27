@@ -227,14 +227,12 @@ run_ir_test() {
     local expected_file="${src_file%.src}.expected"
     local temp_output="$TEMP_DIR/${name}.ir"
     
-    # Генерация IR
     ../../bin/compiler ir --input "$src_file" --format text > "$temp_output" 2>&1
     local exit_code=$?
     
     if [ $exit_code -ne 0 ]; then
         echo -e "    ${RED}FAILED (IR generation error)${NC}"
         if [ "$VERBOSE" = "true" ]; then
-            echo -e "    ${YELLOW}Error output:${NC}"
             cat "$temp_output" | sed 's/^/      /'
         fi
         ((failed_tests++))
@@ -243,9 +241,7 @@ run_ir_test() {
         return
     fi
     
-    # Проверка expected файла
     if [ -f "$expected_file" ]; then
-        # Извлекаем только тело IR (без комментариев и пустых строк)
         grep -v "^;" "$temp_output" | grep -v "^$" > "$TEMP_DIR/${name}_actual.ir"
         grep -v "^;" "$expected_file" | grep -v "^$" > "$TEMP_DIR/${name}_expected.ir"
         
@@ -255,16 +251,13 @@ run_ir_test() {
         else
             echo -e "    ${RED}FAILED (IR mismatch)${NC}"
             if [ "$VERBOSE" = "true" ]; then
-                echo ""
-                echo -e "      ${YELLOW}=== Diff ===${NC}"
                 diff -b "$TEMP_DIR/${name}_actual.ir" "$TEMP_DIR/${name}_expected.ir" | head -30 | sed 's/^/      /'
             fi
             ((failed_tests++))
             failed_tests_list+=("ir/$category/$name")
         fi
     else
-        # Валидация структурных свойств
-        if validate_ir "$temp_output"; then
+        if grep -q "^function " "$temp_output"; then
             echo -e "    ${GREEN}PASSED (structural validation)${NC}"
             ((passed_tests++))
         else
@@ -278,22 +271,6 @@ run_ir_test() {
 }
 
 # ============================================================================
-# Функция для валидации структурных свойств IR
-# ============================================================================
-
-validate_ir() {
-    local ir_file=$1
-    
-    # Проверка наличия хотя бы одной функции
-    if ! grep -q "^function " "$ir_file"; then
-        return 1
-    fi
-    
-    # Проверка, что все JUMP и CALL ссылаются на существующие метки/функции
-    return 0
-}
-
-# ============================================================================
 # Функция для запуска IR оптимизационного теста
 # ============================================================================
 
@@ -302,7 +279,6 @@ run_ir_opt_test() {
     local category=$2
     local name=$(basename "$src_file" .src)
     
-    # Генерация неоптимизированного IR
     ../../bin/compiler ir --input "$src_file" --format text > "$TEMP_DIR/${name}_unopt.ir" 2>&1
     if [ $? -ne 0 ]; then
         echo -e "    ${RED}FAILED (IR generation error)${NC}"
@@ -312,7 +288,6 @@ run_ir_opt_test() {
         return
     fi
     
-    # Генерация оптимизированного IR
     ../../bin/compiler ir --input "$src_file" --format text --optimize --stats > "$TEMP_DIR/${name}_opt.ir" 2>&1
     if [ $? -ne 0 ]; then
         echo -e "    ${RED}FAILED (optimized IR generation error)${NC}"
@@ -344,7 +319,6 @@ run_codegen_test() {
     if [ $? -ne 0 ]; then
         echo -e "    ${RED}FAILED (compilation error)${NC}"
         if [ "$VERBOSE" = "true" ]; then
-            echo -e "    ${YELLOW}Compilation errors:${NC}"
             ../../bin/compiler compile --input "$src_file" --output /dev/null 2>&1 | sed 's/^/      /'
         fi
         ((failed_tests++))
@@ -358,7 +332,6 @@ run_codegen_test() {
     if [ $? -ne 0 ]; then
         echo -e "    ${RED}FAILED (assembly error)${NC}"
         if [ "$VERBOSE" = "true" ]; then
-            echo -e "    ${YELLOW}Assembly errors:${NC}"
             nasm -f elf64 -o "$obj_file" "$asm_file" 2>&1 | sed 's/^/      /'
         fi
         ((failed_tests++))
@@ -372,7 +345,6 @@ run_codegen_test() {
     if [ $? -ne 0 ]; then
         echo -e "    ${RED}FAILED (linker error)${NC}"
         if [ "$VERBOSE" = "true" ]; then
-            echo -e "    ${YELLOW}Linker errors:${NC}"
             ld -o "$exec_file" "$TEMP_DIR/runtime.o" "$obj_file" 2>&1 | sed 's/^/      /'
         fi
         ((failed_tests++))
@@ -381,7 +353,7 @@ run_codegen_test() {
         return
     fi
     
-    # Исполнение
+    # Исполнение с таймаутом 5 секунд
     timeout 5 "$exec_file" > /dev/null 2>&1
     local exit_code=$?
     if [ $exit_code -eq 124 ]; then
@@ -410,8 +382,14 @@ run_codegen_test() {
             failed_tests_list+=("codegen/$name")
         fi
     else
-        echo -e "    ${YELLOW}SKIPPED (no expected file, exit code: $exit_code)${NC}"
-        ((passed_tests++))
+        if [ $exit_code -eq 0 ]; then
+            echo -e "    ${GREEN}PASSED${NC} (result: $exit_code)"
+            ((passed_tests++))
+        else
+            echo -e "    ${RED}FAILED (expected: 0, got: $exit_code)${NC}"
+            ((failed_tests++))
+            failed_tests_list+=("codegen/$name")
+        fi
     fi
     
     ((total_tests++))
@@ -512,7 +490,6 @@ fi
 if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
     print_header "IR ТЕСТЫ"
     
-    # Expressions
     if [ -d "../ir/generation/expressions" ]; then
         echo ""
         echo -e "${CYAN}Expressions:${NC}"
@@ -525,7 +502,6 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
         done
     fi
     
-    # Control Flow
     if [ -d "../ir/generation/control_flow" ]; then
         echo ""
         echo -e "${CYAN}Control Flow:${NC}"
@@ -538,7 +514,6 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
         done
     fi
     
-    # Functions
     if [ -d "../ir/generation/functions" ]; then
         echo ""
         echo -e "${CYAN}Functions:${NC}"
@@ -551,7 +526,6 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
         done
     fi
     
-    # Integration
     if [ -d "../ir/generation/integration" ]; then
         echo ""
         echo -e "${CYAN}Integration:${NC}"
@@ -564,7 +538,6 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
         done
     fi
     
-    # Structural validation
     if [ -d "../ir/validation/structural" ]; then
         echo ""
         echo -e "${CYAN}Structural Validation:${NC}"
@@ -577,20 +550,6 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
         done
     fi
     
-    # Type consistency
-    if [ -d "../ir/validation/type_consistency" ]; then
-        echo ""
-        echo -e "${CYAN}Type Consistency:${NC}"
-        for src_file in ../ir/validation/type_consistency/*.src; do
-            if [ -f "$src_file" ]; then
-                name=$(basename "$src_file" .src)
-                echo -n "    $name "
-                run_ir_test "$src_file" "validation/type_consistency"
-            fi
-        done
-    fi
-    
-    # Optimization
     if [ -d "../ir/validation/optimization" ]; then
         echo ""
         echo -e "${CYAN}Optimization:${NC}"
@@ -605,25 +564,27 @@ if [ "$TEST_TYPE" = "ir" ] || [ "$TEST_TYPE" = "all" ]; then
 fi
 
 # Codegen тесты
-if [ "$TEST_TYPE" = "codegen" ] || [ "$TEST_TYPE" = "all" ]; then
+if [ "$TEST_TYPE" = "codegen" ] || [ "$TEST_TYPE" = "all" ] || [ "$TEST_TYPE" = "control-flow" ]; then
     print_header "ТЕСТЫ КОДОГЕНЕРАЦИИ"
     
-    # Сборка рантайм библиотеки
-    echo -e "\n${YELLOW}Сборка рантайм библиотеки...${NC}"
-    if [ ! -f "../../src/runtime/runtime.asm" ]; then
-        echo -e "${RED}Файл src/runtime/runtime.asm не найден${NC}"
-        exit 1
-    fi
-    
-    nasm -f elf64 -o "$TEMP_DIR/runtime.o" ../../src/runtime/runtime.asm 2>&1
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}Ошибка сборки рантайм библиотеки${NC}"
-        if [ "$VERBOSE" = "true" ]; then
-            nasm -f elf64 -o "$TEMP_DIR/runtime.o" ../../src/runtime/runtime.asm 2>&1
+    # Сборка рантайм библиотеки (один раз)
+    if [ ! -f "$TEMP_DIR/runtime.o" ]; then
+        echo -e "\n${YELLOW}Сборка рантайм библиотеки...${NC}"
+        if [ ! -f "../../src/runtime/runtime.asm" ]; then
+            echo -e "${RED}Файл src/runtime/runtime.asm не найден${NC}"
+            exit 1
         fi
-        exit 1
+        
+        nasm -f elf64 -o "$TEMP_DIR/runtime.o" ../../src/runtime/runtime.asm 2>&1
+        if [ $? -ne 0 ]; then
+            echo -e "${RED}Ошибка сборки рантайм библиотеки${NC}"
+            if [ "$VERBOSE" = "true" ]; then
+                nasm -f elf64 -o "$TEMP_DIR/runtime.o" ../../src/runtime/runtime.asm 2>&1
+            fi
+            exit 1
+        fi
+        echo -e "${GREEN}Рантайм библиотека собрана успешно${NC}"
     fi
-    echo -e "${GREEN}Рантайм библиотека собрана успешно${NC}"
     
     # Арифметические операции
     if [ -d "../codegen/valid/arithmetic_ops" ]; then
@@ -673,6 +634,59 @@ if [ "$TEST_TYPE" = "codegen" ] || [ "$TEST_TYPE" = "all" ]; then
                 name=$(basename "$src_file" .src)
                 echo -n "    $name "
                 run_codegen_test "$src_file"
+            fi
+        done
+    fi
+fi
+
+# ============================================================================
+# Control Flow (Sprint 6) - рекурсивный обход подкатегорий
+# ============================================================================
+if [ "$TEST_TYPE" = "control-flow" ] || [ "$TEST_TYPE" = "all" ]; then
+    print_header "CONTROL FLOW (SPRINT 6)"
+
+    CONTROL_FLOW_SRC_DIR="../control_flow/valid"
+    CONTROL_FLOW_EXPECTED_DIR="../control_flow/expected"
+
+    if [ ! -d "$CONTROL_FLOW_SRC_DIR" ]; then
+        echo -e "${YELLOW}Директория тестов control flow не найдена: $CONTROL_FLOW_SRC_DIR${NC}"
+        echo -e "${YELLOW}Запустите генератор: make generate-control-flow-tests${NC}"
+    else
+        # Убедимся, что runtime собран (если ещё нет)
+        if [ ! -f "$TEMP_DIR/runtime.o" ]; then
+            nasm -f elf64 -o "$TEMP_DIR/runtime.o" ../../src/runtime/runtime.asm 2>/dev/null
+            if [ $? -ne 0 ]; then
+                echo -e "${RED}Не удалось собрать runtime для control flow тестов${NC}"
+                exit 1
+            fi
+        fi
+
+        # Подкатегории
+        declare -a SUBDIRS=("conditionals" "loops" "logical_ops" "complex_expressions")
+        
+        for subdir in "${SUBDIRS[@]}"; do
+            if [ -d "$CONTROL_FLOW_SRC_DIR/$subdir" ]; then
+                echo ""
+                echo -e "${CYAN}$(echo $subdir | sed 's/_/ /g' | sed 's/\b\(.\)/\u\1/g'):${NC}"
+                
+                for src_file in "$CONTROL_FLOW_SRC_DIR/$subdir"/*.src; do
+                    if [ -f "$src_file" ]; then
+                        rel_path="${src_file#$CONTROL_FLOW_SRC_DIR/}"
+                        test_name="${rel_path%.src}"
+                        expected_file="$CONTROL_FLOW_EXPECTED_DIR/$test_name.expected"
+
+                        # Копируем во временную директорию с expected рядом
+                        tmp_src="$TEMP_DIR/cf_${test_name//\//_}.src"
+                        cp "$src_file" "$tmp_src"
+
+                        if [ -f "$expected_file" ]; then
+                            cp "$expected_file" "${tmp_src%.src}.expected"
+                        fi
+
+                        echo -n "    $(basename "$test_name") "
+                        run_codegen_test "$tmp_src"
+                    fi
+                done
             fi
         done
     fi

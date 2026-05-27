@@ -4,7 +4,7 @@ global scope (level 0):
   main: function function -> int (line 9)
 
 
-=== Ошибки ===
+ Ошибки 
 duplicate_declaration: function 'foo' already declared at line 1
   --> line 5, column 1
   |

@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
-=== Ошибки ===
+ Ошибки 
 invalid_return: function 'main' must return a value of type int
   --> line 1, column 1
   |

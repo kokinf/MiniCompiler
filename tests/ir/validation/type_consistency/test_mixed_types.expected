@@ -22,13 +22,11 @@ entry:
   JUMP if_merge_2
 
 if_then_1:
-  ; preds: entry
-  ; idom: entry
   STORE [%t1], 20
   JUMP if_merge_2
 
 if_merge_2:
-  ; preds: entry, if_then_1
-  ; idom: entry
+  ; preds: if_then_1
+  ; idom: if_then_1
   %t9 = LOAD [%t1]
   RETURN %t9

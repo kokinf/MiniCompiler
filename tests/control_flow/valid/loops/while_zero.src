@@ -1,0 +1,8 @@
+fn main() -> int {
+    int i = 0;
+    int flag = 0;
+    while (flag == 1) {
+        i = i + 1;
+    }
+    return 42;
+}

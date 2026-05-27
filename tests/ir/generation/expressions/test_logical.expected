@@ -13,31 +13,50 @@ entry:
   STORE [%t2], false
   %t3 = ALLOCA 1  ; var c: bool
   %t4 = LOAD [%t1]
-  %t5 = LOAD [%t2]
-  %t6 = AND %t4, %t5
-  STORE [%t3], %t6
+  JUMP_IF_NOT %t4, and_merge_2
+  %t5 = MOVE false
+  JUMP and_merge_2
+
+and_right_1:
+  %t6 = LOAD [%t2]
+  %t5 = MOVE %t6
+  JUMP and_merge_2
+
+and_merge_2:
+  ; preds: entry, and_right_1
+  %t5 = PHI (false, entry), (%t6, and_right_1)
+  STORE [%t3], %t5
   %t7 = ALLOCA 1  ; var d: bool
   %t8 = LOAD [%t1]
-  %t9 = LOAD [%t2]
-  %t10 = OR %t8, %t9
-  STORE [%t7], %t10
+  JUMP_IF %t8, or_merge_4
+  %t9 = MOVE true
+  JUMP or_merge_4
+
+or_right_3:
+  %t10 = LOAD [%t2]
+  %t9 = MOVE %t10
+  JUMP or_merge_4
+
+or_merge_4:
+  ; preds: and_merge_2, or_right_3
+  %t9 = PHI (true, and_merge_2), (%t10, or_right_3)
+  STORE [%t7], %t9
   %t11 = ALLOCA 1  ; var e: bool
   %t12 = LOAD [%t1]
   %t13 = NOT %t12
   STORE [%t11], %t13
   %t14 = LOAD [%t1]
-  %t15 = LOAD [%t2]
-  %t16 = NOT %t15
-  %t17 = AND %t14, %t16
-  JUMP_IF %t17, if_then_1
-  JUMP if_merge_2
+  JUMP_IF %t14, sc_and_7
+  JUMP if_merge_6
 
-if_then_1:
-  ; preds: entry
-  ; idom: entry
+if_then_5:
   RETURN 1
 
-if_merge_2:
-  ; preds: entry
-  ; idom: entry
+if_merge_6:
   RETURN 0
+
+sc_and_7:
+  %t15 = LOAD [%t2]
+  %t16 = NOT %t15
+  JUMP_IF %t16, if_then_5
+  JUMP if_merge_6

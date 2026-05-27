@@ -36,18 +36,21 @@ ifeq ($(UNAME_S),Linux)
 	RED = \033[0;31m
 	YELLOW = \033[1;33m
 	BLUE = \033[0;34m
+	CYAN = \033[0;36m
 	NC = \033[0m
 else ifeq ($(UNAME_S),Darwin)
 	GREEN = \033[0;32m
 	RED = \033[0;31m
 	YELLOW = \033[1;33m
 	BLUE = \033[0;34m
+	CYAN = \033[0;36m
 	NC = \033[0m
 else
 	GREEN = 
 	RED = 
 	YELLOW = 
 	BLUE = 
+	CYAN = 
 	NC = 
 endif
 
@@ -139,11 +142,44 @@ ir-stats: build
 	$(OUTPUT_FULL) ir --input examples/factorial.src --stats
 
 # ============================================================================
+# Компиляция в ассемблер
+# ============================================================================
+
+.PHONY: compile
+compile: build
+	@echo "$(YELLOW)Компиляция factorial.src в ассемблер...$(NC)"
+	$(OUTPUT_FULL) compile --input examples/factorial.src --output build/program.asm
+	@echo "$(GREEN)Ассемблерный код: build/program.asm$(NC)"
+
+.PHONY: build-asm
+build-asm:
+	@echo "$(YELLOW)Сборка исполняемого файла...$(NC)"
+	@if [ -f build/program.asm ]; then \
+		nasm -f elf64 build/program.asm -o build/program.o; \
+		nasm -f elf64 src/runtime/runtime.asm -o build/runtime.o; \
+		ld -o build/program build/runtime.o build/program.o; \
+		echo "$(GREEN)Исполняемый файл: build/program$(NC)"; \
+	else \
+		echo "$(RED)Сначала выполните: make compile$(NC)"; \
+	fi
+
+# ============================================================================
 # Тестирование
 # ============================================================================
 
+# Генерация тестов Control Flow (Sprint 6)
+.PHONY: gen-cf-tests
+gen-cf-tests:
+	@echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"
+	@bash scripts/generate_tests.sh
+	@echo "$(GREEN)Тесты сгенерированы$(NC)"
+
 .PHONY: test
 test: build
+	@if [ ! -d tests/control_flow/valid ]; then \
+		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
+		bash scripts/generate_tests.sh; \
+	fi
 	@echo "$(YELLOW)Запуск всех тестов...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh all; \
@@ -179,6 +215,28 @@ test-ir: build
 		cd tests/test_runner && bash run_tests.sh ir; \
 	fi
 
+.PHONY: test-control-flow
+test-control-flow: build
+	@if [ ! -d tests/control_flow/valid ]; then \
+		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
+		bash scripts/generate_tests.sh; \
+	fi
+	@echo "$(YELLOW)Запуск тестов Control Flow (Sprint 6)...$(NC)"
+	@if [ -f tests/test_runner/run_tests.sh ]; then \
+		cd tests/test_runner && bash run_tests.sh control-flow; \
+	fi
+
+.PHONY: test-control-flow-verbose
+test-control-flow-verbose: build
+	@if [ ! -d tests/control_flow/valid ]; then \
+		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
+		bash scripts/generate_tests.sh; \
+	fi
+	@echo "$(YELLOW)Запуск тестов Control Flow (verbose)...$(NC)"
+	@if [ -f tests/test_runner/run_tests.sh ]; then \
+		cd tests/test_runner && bash run_tests.sh control-flow true; \
+	fi
+
 .PHONY: test-go
 test-go:
 	@echo "$(YELLOW)Запуск Go unit тестов...$(NC)"
@@ -186,6 +244,10 @@ test-go:
 
 .PHONY: test-all
 test-all: build test-go
+	@if [ ! -d tests/control_flow/valid ]; then \
+		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
+		bash scripts/generate_tests.sh; \
+	fi
 	@echo "$(YELLOW)Запуск integration тестов...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh all; \
@@ -340,6 +402,8 @@ help:
 	@echo "  make check           - Запустить семантический анализ"
 	@echo "  make check-types     - Семантический анализ с выводом типов"
 	@echo "  make symbols         - Вывести таблицу символов"
+	@echo "  make compile         - Скомпилировать в ассемблер"
+	@echo "  make build-asm       - Собрать исполняемый файл"
 	@echo "  make install         - Установить в GOPATH/bin"
 	@echo "  make dev             - Запуск в режиме разработки"
 	@echo ""
@@ -351,13 +415,16 @@ help:
 	@echo "  make ir-stats        - Показать статистику IR"
 	@echo ""
 	@echo "$(YELLOW)Тестирование:$(NC)"
-	@echo "  make test            - Запустить все тесты"
-	@echo "  make test-lexer      - Запустить только тесты лексера"
-	@echo "  make test-parser     - Запустить только тесты парсера"
-	@echo "  make test-semantic   - Запустить только семантические тесты"
-	@echo "  make test-ir         - Запустить тесты IR"
-	@echo "  make test-go         - Запустить Go unit тесты"
-	@echo "  make test-all        - Запустить все тесты (unit + integration)"
+	@echo "  make test                  - Запустить все тесты"
+	@echo "  make test-lexer            - Запустить только тесты лексера"
+	@echo "  make test-parser           - Запустить только тесты парсера"
+	@echo "  make test-semantic         - Запустить только семантические тесты"
+	@echo "  make test-ir               - Запустить тесты IR"
+	@echo "  make test-control-flow     - Тесты Control Flow (Sprint 6)"
+	@echo "  make test-control-flow-verbose - Тесты Control Flow подробно"
+	@echo "  make gen-cf-tests          - Сгенерировать тесты Control Flow"
+	@echo "  make test-go               - Запустить Go unit тесты"
+	@echo "  make test-all              - Запустить все тесты (unit + integration)"
 	@echo ""
 	@echo "$(YELLOW)Golden testing:$(NC)"
 	@echo "  make golden-generate - Сгенерировать expected файлы"

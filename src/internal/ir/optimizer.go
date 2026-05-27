@@ -41,6 +41,15 @@ func (o *PeepholeOptimizer) Optimize() {
 	}
 }
 
+// isComparison проверяет, является ли опкод сравнением
+func isComparison(op Opcode) bool {
+	switch op {
+	case OpCmpEq, OpCmpNe, OpCmpLt, OpCmpLe, OpCmpGt, OpCmpGe:
+		return true
+	}
+	return false
+}
+
 // optimizeBlock оптимизирует один базовый блок
 func (o *PeepholeOptimizer) optimizeBlock(block *BasicBlock, fn *Function) bool {
 	changed := false
@@ -48,6 +57,76 @@ func (o *PeepholeOptimizer) optimizeBlock(block *BasicBlock, fn *Function) bool 
 
 	for i := 0; i < len(block.Instructions); i++ {
 		inst := block.Instructions[i]
+
+		// Оптимизация: CMP + JUMP_IF -> эффективный условный переход
+		if isComparison(inst.Opcode) && i < len(block.Instructions)-1 {
+			nextInst := block.Instructions[i+1]
+			if (nextInst.Opcode == OpJmpIf || nextInst.Opcode == OpJmpIfNot) && inst.Dest != nil && nextInst.Src1 != nil {
+				// Проверяем, что результат сравнения используется только для перехода
+				if inst.Dest.Name == nextInst.Src1.Name {
+					// Проверяем, что результат сравнения не используется где-то ещё
+					usedElsewhere := false
+					for _, b := range fn.Blocks {
+						for _, use := range b.Uses[inst.Dest.Name] {
+							if use != nextInst {
+								usedElsewhere = true
+								break
+							}
+						}
+						if usedElsewhere {
+							break
+						}
+					}
+
+					if !usedElsewhere {
+						// Объединяем сравнение и условный переход
+						condMap := map[Opcode]string{
+							OpCmpEq: "e", OpCmpNe: "ne",
+							OpCmpLt: "l", OpCmpLe: "le",
+							OpCmpGt: "g", OpCmpGe: "ge",
+						}
+
+						condition, ok := condMap[inst.Opcode]
+						if ok {
+							// Создаем комбинированную инструкцию
+							mergedOp := OpJmpIf
+							if nextInst.Opcode == OpJmpIfNot {
+								mergedOp = OpJmpIfNot
+							}
+
+							merged := &Instruction{
+								Opcode: mergedOp,
+								Src1:   inst.Src1,
+								Src2:   inst.Src2,
+								Comment: fmt.Sprintf("optimized: cmp %s + jump -> conditional jump %s %s",
+									condition, condition, nextInst.Src2.Name),
+								Line:   inst.Line,
+								Column: inst.Column,
+							}
+
+							newInsts = append(newInsts, merged)
+							// Добавляем безусловный переход к цели, если нужно
+							if nextInst.Opcode == OpJmpIf {
+								// После условного перехода нужен безусловный
+								jmpInst := &Instruction{
+									Opcode:  OpJmp,
+									Src1:    NewLabelOperand(nextInst.Src2.Name),
+									Comment: "fallthrough jump",
+								}
+								newInsts = append(newInsts, jmpInst)
+							}
+
+							o.changes = append(o.changes, fmt.Sprintf(
+								"Optimized: merged CMP + JUMP in %s: %s",
+								fn.Name, merged.Comment))
+							changed = true
+							i++ // Пропускаем следующую инструкцию
+							continue
+						}
+					}
+				}
+			}
+		}
 
 		// Алгебраические упрощения
 		if simplified := o.tryAlgebraicSimplification(inst, fn); simplified != nil {

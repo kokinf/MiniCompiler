@@ -1,4 +1,3 @@
-; src/runtime/runtime.asm
 ; MiniCompiler Runtime Library for x86-64 Linux
 ; System V AMD64 ABI
 

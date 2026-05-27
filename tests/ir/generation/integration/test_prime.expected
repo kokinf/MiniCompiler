@@ -12,13 +12,9 @@ entry:
   JUMP if_merge_2
 
 if_then_1:
-  ; preds: entry
-  ; idom: entry
   RETURN false
 
 if_merge_2:
-  ; preds: entry
-  ; idom: entry
   %t4 = ALLOCA 4  ; var i: int
   STORE [%t4], 2
   JUMP while_header_3
@@ -34,8 +30,6 @@ while_header_3:
   JUMP while_exit_5
 
 while_body_4:
-  ; preds: while_header_3
-  ; idom: while_header_3
   %t10 = LOAD [%t1]
   %t11 = LOAD [%t4]
   %t12 = MOD %t10, %t11
@@ -44,18 +38,12 @@ while_body_4:
   JUMP if_merge_7
 
 while_exit_5:
-  ; preds: while_header_3
-  ; idom: while_header_3
   RETURN true
 
 if_then_6:
-  ; preds: while_body_4
-  ; idom: while_body_4
   RETURN false
 
 if_merge_7:
-  ; preds: while_body_4
-  ; idom: while_body_4
   %t14 = LOAD [%t4]
   %t15 = ADD %t14, 1
   STORE [%t4], %t15
@@ -70,11 +58,7 @@ entry:
   JUMP if_merge_2
 
 if_then_1:
-  ; preds: entry
-  ; idom: entry
   RETURN 1
 
 if_merge_2:
-  ; preds: entry
-  ; idom: entry
   RETURN 0

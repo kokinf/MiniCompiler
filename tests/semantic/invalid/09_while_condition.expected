@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
-=== Ошибки ===
+ Ошибки 
 invalid_condition: while condition must be bool, got int
   --> line 3, column 5
   |

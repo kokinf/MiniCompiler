@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
-=== Ошибки ===
+ Ошибки 
 function_not_found: 'x' is not a function
   --> line 3, column 13
   |
