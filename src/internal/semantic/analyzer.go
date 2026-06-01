@@ -13,7 +13,6 @@ type SemanticAnalyzer struct {
 	currentScope string
 	inLoop       bool
 
-	// Для отслеживания объявленных переменных в текущем блоке
 	declaredInBlock map[string]bool
 }
 
@@ -30,9 +29,7 @@ func NewSemanticAnalyzer() *SemanticAnalyzer {
 
 func (sa *SemanticAnalyzer) Analyze(program *ast.ProgramNode) (*SymbolTable, *ErrorCollector, *ast.ProgramNode) {
 	sa.collectDeclarations(program)
-
 	decoratedProgram := sa.analyzeProgram(program)
-
 	return sa.symbolTable, sa.errors, decoratedProgram
 }
 
@@ -45,8 +42,60 @@ func (sa *SemanticAnalyzer) collectDeclarations(program *ast.ProgramNode) {
 			sa.collectStructDecl(d)
 		case *ast.VarDeclNode:
 			sa.collectGlobalVarDecl(d)
+		case *ast.ExternFuncDeclNode:
+			sa.collectExternFuncDecl(d)
 		}
 	}
+}
+
+func (sa *SemanticAnalyzer) collectExternFuncDecl(ed *ast.ExternFuncDeclNode) {
+	funcName := ed.Name.Value
+
+	if existing := sa.symbolTable.Lookup(funcName); existing != nil {
+		sa.errors.Add(ErrDuplicateDeclaration,
+			fmt.Sprintf("function '%s' already declared at line %d", funcName, existing.Line),
+			ed.Line(), ed.Column(), sa.currentScope)
+		return
+	}
+
+	returnType := sa.typeFromAST(ed.ReturnType)
+	if returnType == nil {
+		returnType = NewType(TypeVoid)
+	}
+
+	params := make([]*Symbol, 0)
+	paramTypes := make([]*Type, 0)
+
+	for _, param := range ed.Parameters {
+		paramType := sa.typeFromAST(param.Type)
+		if paramType == nil {
+			paramType = NewType(TypeVoid)
+		}
+		paramTypes = append(paramTypes, paramType)
+
+		paramSym := &Symbol{
+			Name:   param.Name.Value,
+			Kind:   SymbolParameter,
+			Type:   paramType,
+			Line:   param.Name.Line(),
+			Column: param.Name.Column(),
+		}
+		params = append(params, paramSym)
+	}
+
+	funcType := NewFunctionType(returnType, paramTypes)
+
+	sym := &Symbol{
+		Name:       funcName,
+		Kind:       SymbolFunction,
+		Type:       funcType,
+		Line:       ed.Line(),
+		Column:     ed.Column(),
+		Parameters: params,
+		IsExtern:   true,
+	}
+
+	sa.symbolTable.Insert(sym)
 }
 
 func (sa *SemanticAnalyzer) collectFunctionDecl(fd *ast.FunctionDeclNode) {
@@ -191,6 +240,8 @@ func (sa *SemanticAnalyzer) analyzeProgram(program *ast.ProgramNode) *ast.Progra
 		case *ast.VarDeclNode:
 			sa.analyzeGlobalVarDecl(d)
 			decoratedProgram.Declarations = append(decoratedProgram.Declarations, d)
+		case *ast.ExternFuncDeclNode:
+			decoratedProgram.Declarations = append(decoratedProgram.Declarations, d)
 		}
 	}
 
@@ -241,7 +292,6 @@ func (sa *SemanticAnalyzer) analyzeFunction(fd *ast.FunctionDeclNode) *ast.Funct
 	if fd.Body != nil {
 		decoratedFunc.Body = sa.analyzeBlockStmt(fd.Body, sym.Type.Return)
 
-		// Проверка возврата для non-void функций
 		if !sym.Type.Return.IsVoid() {
 			if !sa.hasReturnStatement(fd.Body) {
 				sa.errors.Add(ErrInvalidReturn,
@@ -282,10 +332,49 @@ func (sa *SemanticAnalyzer) analyzeGlobalVarDecl(vd *ast.VarDeclNode) {
 
 	if vd.Initializer != nil {
 		initType := sa.analyzeExpression(vd.Initializer)
-		if initType != nil && !initType.IsAssignableTo(sym.Type) {
+		if initType != nil {
+			if !initType.IsAssignableTo(sym.Type) {
+				sa.errors.Add(ErrTypeMismatch,
+					fmt.Sprintf("cannot assign %s to %s", initType.String(), sym.Type.String()),
+					vd.Line(), vd.Column(), sa.currentScope)
+			}
+
+			if sym.Type.IsArray() {
+				sa.validateArrayInitializer(vd.Initializer, sym.Type, vd.Line(), vd.Column())
+			}
+		}
+	}
+}
+
+func (sa *SemanticAnalyzer) validateArrayInitializer(init ast.ExpressionNode, arrayType *Type, line, col int) {
+	arrLit, ok := init.(*ast.ArrayLiteralExprNode)
+	if !ok {
+		sa.errors.Add(ErrTypeMismatch,
+			"array initializer must be a list literal",
+			line, col, sa.currentScope)
+		return
+	}
+
+	if arrayType.ArraySize >= 0 {
+		if len(arrLit.Elements) > arrayType.ArraySize {
+			sa.errors.Add(ErrInvalidArraySize,
+				fmt.Sprintf("array initializer has %d elements, but array size is %d",
+					len(arrLit.Elements), arrayType.ArraySize),
+				line, col, sa.currentScope)
+		}
+	}
+
+	baseType := arrayType.BaseType
+	if baseType == nil {
+		baseType = arrayType
+	}
+	for i, elem := range arrLit.Elements {
+		elemType := sa.analyzeExpression(elem)
+		if elemType != nil && !elemType.IsAssignableTo(baseType) {
 			sa.errors.Add(ErrTypeMismatch,
-				fmt.Sprintf("cannot assign %s to %s", initType.String(), sym.Type.String()),
-				vd.Line(), vd.Column(), sa.currentScope)
+				fmt.Sprintf("array element %d: cannot assign %s to %s",
+					i, elemType.String(), baseType.String()),
+				elem.Line(), elem.Column(), sa.currentScope)
 		}
 	}
 }
@@ -456,10 +545,16 @@ func (sa *SemanticAnalyzer) analyzeLocalVarDecl(vd *ast.VarDeclNode) {
 
 	if vd.Initializer != nil {
 		initType := sa.analyzeExpression(vd.Initializer)
-		if initType != nil && !initType.IsAssignableTo(sym.Type) {
-			sa.errors.Add(ErrTypeMismatch,
-				fmt.Sprintf("cannot assign %s to %s", initType.String(), sym.Type.String()),
-				vd.Line(), vd.Column(), sa.currentScope)
+		if initType != nil {
+			if !initType.IsAssignableTo(sym.Type) {
+				sa.errors.Add(ErrTypeMismatch,
+					fmt.Sprintf("cannot assign %s to %s", initType.String(), sym.Type.String()),
+					vd.Line(), vd.Column(), sa.currentScope)
+			}
+
+			if sym.Type.IsArray() {
+				sa.validateArrayInitializer(vd.Initializer, sym.Type, vd.Line(), vd.Column())
+			}
 		}
 	}
 }
@@ -480,7 +575,6 @@ func (sa *SemanticAnalyzer) analyzeExpression(expr ast.ExpressionNode) *Type {
 				e.Line(), e.Column(), sa.currentScope)
 			exprType = nil
 		} else {
-			// Проверка use before declaration
 			if sym.Kind == SymbolVariable && !sa.declaredInBlock[e.Value] {
 				currentScope := sa.symbolTable.GetCurrentScope()
 				if sym.Scope == currentScope {
@@ -536,7 +630,6 @@ func (sa *SemanticAnalyzer) analyzeExpression(expr ast.ExpressionNode) *Type {
 				e.Line(), e.Column(), sa.currentScope)
 			exprType = nil
 		} else {
-			// Проверка аргументов
 			expectedParams := funcType.Params
 			if len(e.Arguments) != len(expectedParams) {
 				sa.errors.Add(ErrArgumentCount,
@@ -578,6 +671,43 @@ func (sa *SemanticAnalyzer) analyzeExpression(expr ast.ExpressionNode) *Type {
 			}
 		}
 		exprType = leftType
+		e.SetType(typeToAnnotation(exprType))
+
+	case *ast.IndexExprNode:
+		arrayType := sa.analyzeExpression(e.Array)
+		indexType := sa.analyzeExpression(e.Index)
+
+		if arrayType != nil {
+			if arrayType.IsArray() || arrayType.IsPointer() {
+				if arrayType.BaseType != nil {
+					exprType = arrayType.BaseType
+				} else {
+					exprType = NewType(TypeInt)
+				}
+			} else {
+				sa.errors.Add(ErrTypeMismatch,
+					fmt.Sprintf("cannot index non-array type '%s'", arrayType.String()),
+					e.Line(), e.Column(), sa.currentScope)
+				exprType = nil
+			}
+		}
+
+		if indexType != nil && !indexType.IsInteger() {
+			sa.errors.Add(ErrInvalidArrayIndex,
+				fmt.Sprintf("array index must be integer, got %s", indexType.String()),
+				e.Line(), e.Column(), sa.currentScope)
+		}
+		e.SetType(typeToAnnotation(exprType))
+
+	case *ast.ArrayLiteralExprNode:
+		if len(e.Elements) > 0 {
+			elemType := sa.analyzeExpression(e.Elements[0])
+			if elemType != nil {
+				exprType = NewArrayType(elemType, len(e.Elements))
+			}
+		} else {
+			exprType = NewArrayType(NewType(TypeVoid), 0)
+		}
 		e.SetType(typeToAnnotation(exprType))
 	}
 
@@ -651,6 +781,14 @@ func (sa *SemanticAnalyzer) typeFromAST(t *ast.TypeNode) *Type {
 		return nil
 	}
 
+	if t.Kind == "array" {
+		baseType := sa.typeFromAST(t.BaseType)
+		if baseType == nil {
+			return nil
+		}
+		return NewArrayType(baseType, t.ArraySize)
+	}
+
 	switch t.Kind {
 	case "int":
 		return NewType(TypeInt)
@@ -676,13 +814,11 @@ func (sa *SemanticAnalyzer) typeFromAST(t *ast.TypeNode) *Type {
 	}
 }
 
-// hasReturnStatement проверяет, гарантирует ли блок возврат значения
 func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmtNode) bool {
 	if block == nil {
 		return false
 	}
 
-	// Проверяем все statements с конца
 	for i := len(block.Statements) - 1; i >= 0; i-- {
 		stmt := block.Statements[i]
 
@@ -691,7 +827,6 @@ func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmtNode) bool {
 			return true
 
 		case *ast.IfStmtNode:
-			// If с else  проверяем обе ветки
 			if s.Alternative != nil {
 				consHasRet := sa.blockHasReturnStmt(s.Consequence)
 				altHasRet := sa.blockHasReturnStmt(s.Alternative)
@@ -699,21 +834,17 @@ func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmtNode) bool {
 					return true
 				}
 			}
-			// If без else  продолжаем проверку дальше
 			continue
 
 		case *ast.ForStmtNode:
-			// Бесконечный цикл for (;;) с return внутри
 			if s.Condition == nil && s.Update == nil {
 				if sa.blockHasReturnStmt(s.Body) {
 					return true
 				}
 			}
-			// Обычный for  не гарантирует возврат
 			continue
 
 		case *ast.WhileStmtNode:
-			// Бесконечный цикл while (true) с return внутри
 			if sa.isAlwaysTrue(s.Condition) {
 				if sa.blockHasReturnStmt(s.Body) {
 					return true
@@ -734,7 +865,6 @@ func (sa *SemanticAnalyzer) hasReturnStatement(block *ast.BlockStmtNode) bool {
 	return false
 }
 
-// blockHasReturnStmt проверяет наличие return в блоке
 func (sa *SemanticAnalyzer) blockHasReturnStmt(stmt ast.StatementNode) bool {
 	if stmt == nil {
 		return false
@@ -755,7 +885,6 @@ func (sa *SemanticAnalyzer) blockHasReturnStmt(stmt ast.StatementNode) bool {
 	}
 }
 
-// isAlwaysTrue проверяет, является ли условие всегда истинным
 func (sa *SemanticAnalyzer) isAlwaysTrue(expr ast.ExpressionNode) bool {
 	if lit, ok := expr.(*ast.LiteralExprNode); ok {
 		return lit.TypeName == "bool" && lit.BoolValue

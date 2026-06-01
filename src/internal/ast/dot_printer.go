@@ -45,6 +45,21 @@ func (p *DOTPrinter) printNode(node Node) int {
 	id := p.nextID()
 
 	switch n := node.(type) {
+	case *ExternFuncDeclNode:
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Extern\\n%s -> %s\", fillcolor=lightblue];\n",
+			id, n.Name.Value, n.ReturnType.String()))
+
+		paramsID := p.nextID()
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Parameters\", shape=box, fillcolor=lightsalmon];\n", paramsID))
+		p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, paramsID))
+
+		for _, param := range n.Parameters {
+			paramID := p.nextID()
+			p.output.WriteString(fmt.Sprintf("  node%d [label=\"%s\", shape=box, fillcolor=lightsalmon];\n",
+				paramID, param.String()))
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", paramsID, paramID))
+		}
+
 	case *FunctionDeclNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Function\\n%s -> %s\", fillcolor=lightgreen];\n",
 			id, n.Name.Value, n.ReturnType.String()))
@@ -147,6 +162,7 @@ func (p *DOTPrinter) printStatement(stmt StatementNode) int {
 	switch s := stmt.(type) {
 	case *BlockStmtNode:
 		return p.printBlockStmt(s)
+
 	case *IfStmtNode:
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"If\", fillcolor=lightcoral];\n", id))
 
@@ -189,6 +205,9 @@ func (p *DOTPrinter) printStatement(stmt StatementNode) int {
 		exprID := p.printExpression(s.Expression)
 		p.output.WriteString(fmt.Sprintf("  node%d [label=\"ExprStmt\", fillcolor=lightcoral];\n", id))
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d;\n", id, exprID))
+
+	case *VarDeclNode:
+		return p.printNode(s)
 	}
 
 	return id
@@ -266,6 +285,20 @@ func (p *DOTPrinter) printExpression(expr ExpressionNode) int {
 		rightID := p.printExpression(e.Right)
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"left\"];\n", id, leftID))
 		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"right\"];\n", id, rightID))
+
+	case *IndexExprNode:
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"Index[]\", fillcolor=lightgray];\n", id))
+		arrayID := p.printExpression(e.Array)
+		indexID := p.printExpression(e.Index)
+		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"array\"];\n", id, arrayID))
+		p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"index\"];\n", id, indexID))
+
+	case *ArrayLiteralExprNode:
+		p.output.WriteString(fmt.Sprintf("  node%d [label=\"ArrayLiteral{%d}\", fillcolor=lightgray];\n", id, len(e.Elements)))
+		for i, elem := range e.Elements {
+			elemID := p.printExpression(elem)
+			p.output.WriteString(fmt.Sprintf("  node%d -> node%d [label=\"[%d]\"];\n", id, elemID, i))
+		}
 	}
 
 	return id

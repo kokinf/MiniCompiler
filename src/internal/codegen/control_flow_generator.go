@@ -1,6 +1,7 @@
 package codegen
 
 import (
+	"fmt"
 	"mikrocompiler/src/internal/ir"
 )
 
@@ -22,23 +23,18 @@ func NewControlFlowGenerator(gen *X86Generator, labelManager *LabelManager, expr
 
 // GenerateConditionalJump генерирует условный переход
 func (cfg *ControlFlowGenerator) GenerateConditionalJump(inst *ir.Instruction) {
-	// Оптимизировано: test eax, eax + jnz/jz
 	cfg.gen.emit("    test eax, eax")
-	// Используем оригинальное имя метки из IR
 	cfg.gen.emit("    jnz %s", inst.Src2.Name)
 }
 
 // GenerateConditionalJumpNot генерирует условный переход с отрицанием
 func (cfg *ControlFlowGenerator) GenerateConditionalJumpNot(inst *ir.Instruction) {
-	// Оптимизировано: test eax, eax + jz
 	cfg.gen.emit("    test eax, eax")
-	// Используем оригинальное имя метки из IR
 	cfg.gen.emit("    jz %s", inst.Src2.Name)
 }
 
 // GenerateUnconditionalJump генерирует безусловный переход
 func (cfg *ControlFlowGenerator) GenerateUnconditionalJump(inst *ir.Instruction) {
-	// Используем оригинальное имя метки из IR
 	cfg.gen.emit("    jmp %s", inst.Src1.Name)
 }
 
@@ -50,7 +46,6 @@ func (cfg *ControlFlowGenerator) GenerateReturn(inst *ir.Instruction) {
 
 	cfg.gen.returnEmitted = true
 
-	// Восстанавливаем стек перед возвратом
 	stackSize := cfg.gen.stackFrame.GetStackSize()
 	if stackSize > 0 {
 		cfg.gen.emit("    mov rsp, rbp")
@@ -61,7 +56,6 @@ func (cfg *ControlFlowGenerator) GenerateReturn(inst *ir.Instruction) {
 
 // GenerateBasicBlock генерирует код для базового блока
 func (cfg *ControlFlowGenerator) GenerateBasicBlock(block *ir.BasicBlock) {
-	// Используем оригинальное имя метки из IR без изменений
 	if block.Label != "entry" {
 		cfg.gen.emit("%s:", block.Label)
 	}
@@ -75,11 +69,9 @@ func (cfg *ControlFlowGenerator) GenerateBasicBlock(block *ir.BasicBlock) {
 func (cfg *ControlFlowGenerator) generateInstruction(inst *ir.Instruction) {
 	switch inst.Opcode {
 	case ir.OpAlloca:
-		// ALLOCA уже обработан в collectAllocations
 		return
 
 	case ir.OpParam:
-		// Сохраняем PARAM для последующего CALL
 		cfg.gen.pendingParams = append(cfg.gen.pendingParams, inst)
 		return
 
@@ -117,7 +109,19 @@ func (cfg *ControlFlowGenerator) generateInstruction(inst *ir.Instruction) {
 		cfg.GenerateConditionalJumpNot(inst)
 
 	case ir.OpCall:
-		cfg.exprGenerator.GenerateCallExpr(inst)
+		if cfg.gen.isExternCall(inst.Src1.Name) {
+			// Передаём pendingParams в inst.Args если их нет
+			if len(inst.Args) == 0 && len(cfg.gen.pendingParams) > 0 {
+				for _, p := range cfg.gen.pendingParams {
+					if p.Src2 != nil {
+						inst.Args = append(inst.Args, p.Src2)
+					}
+				}
+			}
+			cfg.gen.externGen.GenerateExternCall(inst)
+		} else {
+			cfg.exprGenerator.GenerateCallExpr(inst)
+		}
 		cfg.gen.pendingParams = nil
 
 	case ir.OpRet:
@@ -130,8 +134,14 @@ func (cfg *ControlFlowGenerator) generateInstruction(inst *ir.Instruction) {
 		cfg.exprGenerator.GeneratePhiExpr(inst)
 
 	case ir.OpLabel:
-		// Используем оригинальное имя метки из IR
 		cfg.gen.emit("%s:", inst.Src1.Name)
+
+	case ir.OpGep:
+		cfg.gen.arrayGen.GenerateGEP(inst, 4)
+		// Сохраняем размер результата GEP (всегда 8 байт — указатель)
+		if inst.Dest != nil {
+			cfg.gen.tempToAddrSize[inst.Dest.Name] = 8
+		}
 
 	default:
 		cfg.gen.emit("    ; unknown opcode: %s", inst.Opcode.String())
@@ -144,7 +154,6 @@ func (cfg *ControlFlowGenerator) GenerateFunctionPrologue(fn *ir.Function) {
 	cfg.gen.emit("    mov rbp, rsp")
 
 	stackSize := cfg.gen.stackFrame.GetStackSize()
-	// Выравниваем по 16 байт
 	if stackSize%16 != 0 {
 		stackSize += 16 - (stackSize % 16)
 	}
@@ -164,4 +173,8 @@ func (cfg *ControlFlowGenerator) GenerateFunctionEpilogue() {
 	}
 	cfg.gen.emit("    pop rbp")
 	cfg.gen.emit("    ret")
+}
+
+func (cfg *ControlFlowGenerator) String() string {
+	return fmt.Sprintf("ControlFlowGenerator")
 }

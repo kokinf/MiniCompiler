@@ -2,6 +2,7 @@ package ir
 
 import (
 	"fmt"
+
 	"mikrocompiler/src/internal/ast"
 	"mikrocompiler/src/internal/semantic"
 )
@@ -15,21 +16,17 @@ type IRGenerator struct {
 	currentFunc  *Function
 	currentBlock *BasicBlock
 
-	// Для циклов
 	breakTargets    []*BasicBlock
 	continueTargets []*BasicBlock
 
-	// Переменные -> их адреса в памяти
 	varAddresses map[string]*Operand
 
-	// Счетчики для меток
 	labelCounter int
 
-	// Для PHI узлов
 	mergeBlocks map[string]*BasicBlock
 
-	// Для short-circuit выражений
-	inShortCircuit bool
+	// Sprint 7: отслеживание массивов для автоматического освобождения
+	arrayAllocs map[string]*Operand
 }
 
 // NewIRGenerator создает новый генератор IR
@@ -43,13 +40,12 @@ func NewIRGenerator(symbolTable *semantic.SymbolTable, typeSystem *semantic.Type
 		varAddresses:    make(map[string]*Operand),
 		labelCounter:    0,
 		mergeBlocks:     make(map[string]*BasicBlock),
-		inShortCircuit:  false,
+		arrayAllocs:     make(map[string]*Operand),
 	}
 }
 
 // Generate генерирует IR для всей программы
 func (g *IRGenerator) Generate(program *ast.ProgramNode) *Program {
-	// Сначала собираем глобальные переменные
 	for _, decl := range program.Declarations {
 		if vd, ok := decl.(*ast.VarDeclNode); ok {
 			g.generateGlobalVar(vd)
@@ -61,21 +57,22 @@ func (g *IRGenerator) Generate(program *ast.ProgramNode) *Program {
 		switch d := decl.(type) {
 		case *ast.FunctionDeclNode:
 			g.generateFunction(d)
+		case *ast.ExternFuncDeclNode:
+			g.generateExternFunction(d)
 		case *ast.StructDeclNode:
-			// Структуры только декларируются, не генерируют код
 		}
 	}
 
-	// Строим CFG и DOM дерево для всех функций
 	for _, fn := range g.program.Functions {
-		fn.BuildDominatorTree()
-		fn.BuildGlobalDefUseChains()
+		if !fn.IsExtern {
+			fn.BuildDominatorTree()
+			fn.BuildGlobalDefUseChains()
+		}
 	}
 
 	return g.program
 }
 
-// generateGlobalVar генерирует глобальную переменную
 func (g *IRGenerator) generateGlobalVar(vd *ast.VarDeclNode) {
 	var init *Operand
 	if vd.Initializer != nil {
@@ -84,7 +81,23 @@ func (g *IRGenerator) generateGlobalVar(vd *ast.VarDeclNode) {
 	g.program.AddGlobal(vd.Name.Value, vd.Type.String(), init)
 }
 
-// generateFunction генерирует IR для функции
+func (g *IRGenerator) generateExternFunction(ed *ast.ExternFuncDeclNode) {
+	funcName := ed.Name.Value
+	returnType := "void"
+	if ed.ReturnType != nil && ed.ReturnType.Kind != "" {
+		returnType = ed.ReturnType.String()
+	}
+
+	extFunc := NewFunction(funcName, returnType)
+	extFunc.IsExtern = true
+
+	for _, param := range ed.Parameters {
+		extFunc.AddParam(param.Name.Value, param.Type.String())
+	}
+
+	g.program.AddFunction(extFunc)
+}
+
 func (g *IRGenerator) generateFunction(fd *ast.FunctionDeclNode) {
 	funcName := fd.Name.Value
 	returnType := "void"
@@ -95,30 +108,22 @@ func (g *IRGenerator) generateFunction(fd *ast.FunctionDeclNode) {
 	g.currentFunc = NewFunction(funcName, returnType)
 	g.currentBlock = g.currentFunc.EntryBlock
 	g.varAddresses = make(map[string]*Operand)
+	g.arrayAllocs = make(map[string]*Operand)
 	g.mergeBlocks = make(map[string]*BasicBlock)
 	g.labelCounter = 0
 
 	// Добавляем параметры
 	for i, param := range fd.Parameters {
-		g.currentFunc.AddParam(param.Name.Value, param.Type.String())
-		paramAddr := g.currentFunc.NewTemp()
-		typeSize := g.getTypeSize(param.Type.String())
-		g.currentBlock.AddInstruction(&Instruction{
-			Opcode:  OpAlloca,
-			Dest:    paramAddr,
-			Src1:    NewLiteralOperand(typeSize),
-			Comment: fmt.Sprintf("param %s: %s", param.Name.Value, param.Type.String()),
-		})
-		g.currentBlock.AddInstruction(NewStoreInst(paramAddr, NewVarOperand(param.Name.Value)))
-		g.varAddresses[param.Name.Value] = paramAddr
+		paramType := param.Type.String()
+		g.currentFunc.AddParam(param.Name.Value, paramType)
+		// Параметры доступны напрямую через VarOperand
+		g.varAddresses[param.Name.Value] = NewVarOperand(param.Name.Value)
 
-		// Устанавливаем смещение параметра
-		offset := 8 + i*8
 		g.currentFunc.Locals[param.Name.Value] = &VarInfo{
 			Name:   param.Name.Value,
-			Type:   param.Type.String(),
-			Offset: offset,
-			Size:   typeSize,
+			Type:   paramType,
+			Offset: 8 + i*8,
+			Size:   g.getTypeSize(paramType),
 		}
 	}
 
@@ -127,8 +132,9 @@ func (g *IRGenerator) generateFunction(fd *ast.FunctionDeclNode) {
 		g.generateBlockStmt(fd.Body)
 	}
 
-	// Если функция void и нет return, добавляем RETURN
+	// Вставляем освобождение массивов и return если нужно
 	if !g.currentBlock.IsTerminated() {
+		g.emitArrayFrees()
 		if returnType == "void" {
 			g.currentBlock.AddInstruction(NewRetInst(nil))
 		} else {
@@ -141,7 +147,43 @@ func (g *IRGenerator) generateFunction(fd *ast.FunctionDeclNode) {
 	g.currentBlock = nil
 }
 
-// getTypeSize возвращает размер типа в байтах
+func (g *IRGenerator) emitArrayFrees() {
+	if len(g.arrayAllocs) == 0 {
+		return
+	}
+
+	// Собираем имена массивов
+	var names []string
+	for name := range g.arrayAllocs {
+		names = append(names, name)
+	}
+
+	// Освобождаем в обратном порядке
+	for i := len(names) - 1; i >= 0; i-- {
+		name := names[i]
+		ptrOp := g.arrayAllocs[name]
+
+		// PARAM для free
+		g.currentBlock.AddInstruction(&Instruction{
+			Opcode: OpParam,
+			Src1:   NewLiteralOperand(0),
+			Src2:   ptrOp,
+		})
+
+		// Вызов free
+		freeCall := g.currentFunc.NewTemp()
+		g.currentBlock.AddInstruction(&Instruction{
+			Opcode:  OpCall,
+			Dest:    freeCall,
+			Src1:    NewVarOperand("free"),
+			Args:    []*Operand{ptrOp},
+			Comment: fmt.Sprintf("free(%s)", name),
+		})
+
+		delete(g.arrayAllocs, name)
+	}
+}
+
 func (g *IRGenerator) getTypeSize(typeName string) int {
 	switch typeName {
 	case "int":
@@ -152,18 +194,18 @@ func (g *IRGenerator) getTypeSize(typeName string) int {
 		return 1
 	case "string":
 		return 16
+	case "pointer", "void*", "int[]", "float[]", "bool[]", "string[]":
+		return 8
 	default:
 		return 8
 	}
 }
 
-// newLabel генерирует уникальную метку
 func (g *IRGenerator) newLabel(prefix string) string {
 	g.labelCounter++
 	return g.currentFunc.NewLabel(prefix)
 }
 
-// generateBlockStmt генерирует блок операторов
 func (g *IRGenerator) generateBlockStmt(block *ast.BlockStmtNode) {
 	for _, stmt := range block.Statements {
 		if g.currentBlock.IsTerminated() {
@@ -173,7 +215,6 @@ func (g *IRGenerator) generateBlockStmt(block *ast.BlockStmtNode) {
 	}
 }
 
-// generateStatement генерирует оператор
 func (g *IRGenerator) generateStatement(stmt ast.StatementNode) {
 	switch s := stmt.(type) {
 	case *ast.VarDeclNode:
@@ -197,35 +238,34 @@ func (g *IRGenerator) generateStatement(stmt ast.StatementNode) {
 	}
 }
 
-// generateVarDecl генерирует объявление переменной
 func (g *IRGenerator) generateVarDecl(vd *ast.VarDeclNode) {
 	varName := vd.Name.Value
+	typeStr := vd.Type.String()
 
-	// Создаем временную для адреса переменной
+	if vd.Type.Kind == "array" {
+		g.generateArrayVarDecl(vd)
+		return
+	}
+
 	addrTemp := g.currentFunc.NewTemp()
+	typeSize := g.getTypeSize(typeStr)
 
-	// Выделяем память
-	typeSize := g.getTypeSize(vd.Type.String())
-
-	allocInst := &Instruction{
+	g.currentBlock.AddInstruction(&Instruction{
 		Opcode:  OpAlloca,
 		Dest:    addrTemp,
 		Src1:    NewLiteralOperand(typeSize),
-		Comment: fmt.Sprintf("var %s: %s", varName, vd.Type.String()),
-	}
-	g.currentBlock.AddInstruction(allocInst)
+		Comment: fmt.Sprintf("var %s: %s", varName, typeStr),
+	})
 	g.varAddresses[varName] = addrTemp
 
-	// Добавляем в локальные переменные функции
 	offset := len(g.currentFunc.Locals) * 8
 	g.currentFunc.Locals[varName] = &VarInfo{
 		Name:   varName,
-		Type:   vd.Type.String(),
+		Type:   typeStr,
 		Offset: offset,
 		Size:   typeSize,
 	}
 
-	// Инициализатор
 	if vd.Initializer != nil {
 		initVal := g.generateExpression(vd.Initializer)
 		if initVal != nil {
@@ -234,7 +274,78 @@ func (g *IRGenerator) generateVarDecl(vd *ast.VarDeclNode) {
 	}
 }
 
-// generateIfStmt генерирует if оператор с поддержкой short-circuit
+func (g *IRGenerator) generateArrayVarDecl(vd *ast.VarDeclNode) {
+	varName := vd.Name.Value
+	baseType := vd.Type.BaseType
+
+	if baseType == nil {
+		return
+	}
+
+	elemSize := g.getTypeSize(baseType.Kind)
+	if elemSize == 0 {
+		elemSize = g.getTypeSize(baseType.String())
+	}
+
+	var totalSize int
+	if vd.Type.ArraySize >= 0 {
+		totalSize = vd.Type.ArraySize * elemSize
+	} else if vd.Initializer != nil {
+		if arrLit, ok := vd.Initializer.(*ast.ArrayLiteralExprNode); ok {
+			totalSize = len(arrLit.Elements) * elemSize
+		} else {
+			totalSize = 8
+		}
+	} else {
+		totalSize = 8
+	}
+
+	// Вызываем malloc(totalSize)
+	sizeOp := NewLiteralOperand(totalSize)
+
+	g.currentBlock.AddInstruction(&Instruction{
+		Opcode: OpParam,
+		Src1:   NewLiteralOperand(0),
+		Src2:   sizeOp,
+	})
+
+	mallocResult := g.currentFunc.NewTemp()
+	g.currentBlock.AddInstruction(&Instruction{
+		Opcode:  OpCall,
+		Dest:    mallocResult,
+		Src1:    NewVarOperand("malloc"),
+		Args:    []*Operand{sizeOp},
+		Comment: fmt.Sprintf("arr %s = malloc(%d)", varName, totalSize),
+	})
+
+	// Сохраняем результат malloc как переменную
+	g.varAddresses[varName] = mallocResult
+	g.arrayAllocs[varName] = mallocResult
+
+	g.currentFunc.Locals[varName] = &VarInfo{
+		Name: varName,
+		Type: fmt.Sprintf("%s[]", baseType.String()),
+		Size: 8,
+	}
+
+	// Инициализация элементов массива
+	if vd.Initializer != nil {
+		if arrLit, ok := vd.Initializer.(*ast.ArrayLiteralExprNode); ok {
+			for i, elem := range arrLit.Elements {
+				elemVal := g.generateExpression(elem)
+				if elemVal == nil {
+					continue
+				}
+
+				idxOp := NewLiteralOperand(i)
+				elemAddr := g.currentFunc.NewTemp()
+				g.currentBlock.AddInstruction(NewGepInst(elemAddr, mallocResult, idxOp))
+				g.currentBlock.AddInstruction(NewStoreInst(elemAddr, elemVal))
+			}
+		}
+	}
+}
+
 func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 	thenBlock := g.currentFunc.NewBlock(g.newLabel("if_then"))
 	var elseBlock *BasicBlock
@@ -243,20 +354,17 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 	}
 	mergeBlock := g.currentFunc.NewBlock(g.newLabel("if_merge"))
 
-	// Сохраняем состояние для PHI
 	savedVarAddresses := make(map[string]*Operand)
 	for k, v := range g.varAddresses {
 		savedVarAddresses[k] = v
 	}
 
-	// Генерируем условие с short-circuit поддержкой
 	if is.Alternative != nil {
 		g.generateCondition(is.Condition, thenBlock, elseBlock)
 	} else {
 		g.generateCondition(is.Condition, thenBlock, mergeBlock)
 	}
 
-	// Связываем блоки
 	if !g.currentBlock.IsTerminated() {
 		g.currentBlock.AddSuccessor(thenBlock)
 		thenBlock.AddPredecessor(g.currentBlock)
@@ -269,11 +377,9 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 		}
 	}
 
-	// Then блок
 	g.currentBlock = thenBlock
 	g.generateStatement(is.Consequence)
 
-	// Собираем изменённые переменные для PHI
 	thenVarAddrs := make(map[string]*Operand)
 	for k, v := range g.varAddresses {
 		thenVarAddrs[k] = v
@@ -285,7 +391,6 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 		mergeBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// Else блок
 	if elseBlock != nil {
 		g.varAddresses = savedVarAddresses
 		g.currentBlock = elseBlock
@@ -300,12 +405,10 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 		g.varAddresses = savedVarAddresses
 	}
 
-	// Генерируем PHI узлы в merge блоке
 	g.currentBlock = mergeBlock
 	for varName, thenAddr := range thenVarAddrs {
 		elseAddr, exists := g.varAddresses[varName]
 		if !exists || thenAddr.Name != elseAddr.Name {
-			// Переменная была изменена в одной из веток - создаём PHI
 			phiTemp := g.currentFunc.NewTemp()
 			pairs := []PhiPair{
 				{Value: thenAddr, Block: thenBlock},
@@ -322,22 +425,18 @@ func (g *IRGenerator) generateIfStmt(is *ast.IfStmtNode) {
 	}
 }
 
-// generateWhileStmt генерирует while оператор с поддержкой short-circuit
 func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 	headerBlock := g.currentFunc.NewBlock(g.newLabel("while_header"))
 	bodyBlock := g.currentFunc.NewBlock(g.newLabel("while_body"))
 	exitBlock := g.currentFunc.NewBlock(g.newLabel("while_exit"))
 
-	// Сохраняем цели для break/continue
 	g.breakTargets = append(g.breakTargets, exitBlock)
 	g.continueTargets = append(g.continueTargets, headerBlock)
 
-	// Переход к заголовку
 	g.currentBlock.AddInstruction(NewJumpInst(headerBlock))
 	g.currentBlock.AddSuccessor(headerBlock)
 	headerBlock.AddPredecessor(g.currentBlock)
 
-	// Заголовок - проверка условия с short-circuit
 	g.currentBlock = headerBlock
 	g.generateCondition(ws.Condition, bodyBlock, exitBlock)
 
@@ -348,7 +447,6 @@ func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 		exitBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// Тело цикла
 	g.currentBlock = bodyBlock
 	g.generateStatement(ws.Body)
 	if !g.currentBlock.IsTerminated() {
@@ -357,16 +455,13 @@ func (g *IRGenerator) generateWhileStmt(ws *ast.WhileStmtNode) {
 		headerBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// Восстанавливаем цели
 	g.breakTargets = g.breakTargets[:len(g.breakTargets)-1]
 	g.continueTargets = g.continueTargets[:len(g.continueTargets)-1]
 
 	g.currentBlock = exitBlock
 }
 
-// generateForStmt генерирует for оператор с поддержкой short-circuit
 func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
-	// Инициализация
 	if fs.Init != nil {
 		g.generateStatement(fs.Init)
 	}
@@ -376,16 +471,13 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	updateBlock := g.currentFunc.NewBlock(g.newLabel("for_update"))
 	exitBlock := g.currentFunc.NewBlock(g.newLabel("for_exit"))
 
-	// Сохраняем цели для break/continue
 	g.breakTargets = append(g.breakTargets, exitBlock)
 	g.continueTargets = append(g.continueTargets, updateBlock)
 
-	// Переход к заголовку
 	g.currentBlock.AddInstruction(NewJumpInst(headerBlock))
 	g.currentBlock.AddSuccessor(headerBlock)
 	headerBlock.AddPredecessor(g.currentBlock)
 
-	// Заголовок - проверка условия с short-circuit
 	g.currentBlock = headerBlock
 	if fs.Condition != nil {
 		g.generateCondition(fs.Condition, bodyBlock, exitBlock)
@@ -401,7 +493,6 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 		bodyBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// Тело цикла
 	g.currentBlock = bodyBlock
 	g.generateStatement(fs.Body)
 	if !g.currentBlock.IsTerminated() {
@@ -410,10 +501,8 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 		updateBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// Обновление
 	g.currentBlock = updateBlock
 	if fs.Update != nil {
-		// Создаём ExprStmtNode для обновления и генерируем как statement
 		updateStmt := &ast.ExprStmtNode{
 			Token:      fs.Token,
 			Expression: fs.Update,
@@ -424,21 +513,16 @@ func (g *IRGenerator) generateForStmt(fs *ast.ForStmtNode) {
 	g.currentBlock.AddSuccessor(headerBlock)
 	headerBlock.AddPredecessor(g.currentBlock)
 
-	// Восстанавливаем цели
 	g.breakTargets = g.breakTargets[:len(g.breakTargets)-1]
 	g.continueTargets = g.continueTargets[:len(g.continueTargets)-1]
 
 	g.currentBlock = exitBlock
 }
 
-// generateCondition генерирует условный переход с short-circuit для && и ||
 func (g *IRGenerator) generateCondition(expr ast.ExpressionNode, trueBlock, falseBlock *BasicBlock) {
 	if binExpr, ok := expr.(*ast.BinaryExprNode); ok {
 		switch binExpr.Operator {
 		case "&&":
-			// Для A && B:
-			// Если A ложно -> falseBlock
-			// Иначе проверяем B -> trueBlock/falseBlock
 			midBlock := g.currentFunc.NewBlock(g.newLabel("sc_and"))
 			g.generateCondition(binExpr.Left, midBlock, falseBlock)
 
@@ -452,9 +536,6 @@ func (g *IRGenerator) generateCondition(expr ast.ExpressionNode, trueBlock, fals
 			return
 
 		case "||":
-			// Для A || B:
-			// Если A истинно -> trueBlock
-			// Иначе проверяем B -> trueBlock/falseBlock
 			midBlock := g.currentFunc.NewBlock(g.newLabel("sc_or"))
 			g.generateCondition(binExpr.Left, trueBlock, midBlock)
 
@@ -469,7 +550,6 @@ func (g *IRGenerator) generateCondition(expr ast.ExpressionNode, trueBlock, fals
 		}
 	}
 
-	// Для остальных выражений: вычисляем и делаем условный переход
 	val := g.generateExpression(expr)
 	if val != nil {
 		g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, val, trueBlock))
@@ -477,7 +557,6 @@ func (g *IRGenerator) generateCondition(expr ast.ExpressionNode, trueBlock, fals
 	}
 }
 
-// generateReturnStmt генерирует return оператор
 func (g *IRGenerator) generateReturnStmt(rs *ast.ReturnStmtNode) {
 	var retVal *Operand
 	if rs.RetValue != nil {
@@ -486,24 +565,31 @@ func (g *IRGenerator) generateReturnStmt(rs *ast.ReturnStmtNode) {
 	g.currentBlock.AddInstruction(NewRetInst(retVal))
 }
 
-// generateAssignment генерирует присваивание
 func (g *IRGenerator) generateAssignment(ae *ast.AssignmentExprNode) {
 	rightVal := g.generateExpression(ae.Right)
 	if rightVal == nil {
 		return
 	}
 
-	if ident, ok := ae.Left.(*ast.IdentifierNode); ok {
-		if addr, exists := g.varAddresses[ident.Value]; exists {
+	switch left := ae.Left.(type) {
+	case *ast.IdentifierNode:
+		if addr, exists := g.varAddresses[left.Value]; exists {
 			g.currentBlock.AddInstruction(NewStoreInst(addr, rightVal))
 		} else {
-			// Глобальная переменная
-			g.currentBlock.AddInstruction(NewStoreInst(NewGlobalOperand(ident.Value), rightVal))
+			g.currentBlock.AddInstruction(NewStoreInst(NewGlobalOperand(left.Value), rightVal))
+		}
+
+	case *ast.IndexExprNode:
+		arrayPtr := g.generateExpression(left.Array)
+		index := g.generateExpression(left.Index)
+		if arrayPtr != nil && index != nil {
+			elemAddr := g.currentFunc.NewTemp()
+			g.currentBlock.AddInstruction(NewGepInst(elemAddr, arrayPtr, index))
+			g.currentBlock.AddInstruction(NewStoreInst(elemAddr, rightVal))
 		}
 	}
 }
 
-// generateExpression генерирует выражение и возвращает операнд с результатом
 func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 	if expr == nil {
 		return nil
@@ -515,7 +601,6 @@ func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 	case *ast.IdentifierNode:
 		return g.generateIdentifier(e)
 	case *ast.BinaryExprNode:
-		// Обрабатываем && и || специально для short-circuit
 		switch e.Operator {
 		case "&&":
 			return g.generateLogicalAnd(e)
@@ -530,14 +615,81 @@ func (g *IRGenerator) generateExpression(expr ast.ExpressionNode) *Operand {
 		return g.generateCallExpr(e)
 	case *ast.AssignmentExprNode:
 		return g.generateAssignmentExpr(e)
+	case *ast.IndexExprNode:
+		return g.generateIndexExpr(e)
+	case *ast.ArrayLiteralExprNode:
+		return g.generateArrayLiteral(e)
 	default:
 		return nil
 	}
 }
 
-// generateLogicalAnd генерирует short-circuit evaluation для &&
+func (g *IRGenerator) generateIndexExpr(ie *ast.IndexExprNode) *Operand {
+	arrayPtr := g.generateExpression(ie.Array)
+	index := g.generateExpression(ie.Index)
+
+	if arrayPtr == nil || index == nil {
+		return nil
+	}
+
+	elemAddr := g.currentFunc.NewTemp()
+	g.currentBlock.AddInstruction(NewGepInst(elemAddr, arrayPtr, index))
+
+	result := g.currentFunc.NewTemp()
+	g.currentBlock.AddInstruction(NewLoadInst(result, elemAddr))
+
+	return result
+}
+
+func (g *IRGenerator) generateArrayLiteral(al *ast.ArrayLiteralExprNode) *Operand {
+	size := len(al.Elements)
+	elemSize := 4
+
+	if size > 0 {
+		if lit, ok := al.Elements[0].(*ast.LiteralExprNode); ok {
+			switch lit.TypeName {
+			case "float":
+				elemSize = 8
+			case "bool":
+				elemSize = 1
+			}
+		}
+	}
+
+	totalSize := size * elemSize
+
+	sizeOp := NewLiteralOperand(totalSize)
+	g.currentBlock.AddInstruction(&Instruction{
+		Opcode: OpParam,
+		Src1:   NewLiteralOperand(0),
+		Src2:   sizeOp,
+	})
+
+	arrayPtr := g.currentFunc.NewTemp()
+	g.currentBlock.AddInstruction(&Instruction{
+		Opcode:  OpCall,
+		Dest:    arrayPtr,
+		Src1:    NewVarOperand("malloc"),
+		Args:    []*Operand{sizeOp},
+		Comment: fmt.Sprintf("malloc(%d) for array literal", totalSize),
+	})
+
+	for i, elem := range al.Elements {
+		elemVal := g.generateExpression(elem)
+		if elemVal == nil {
+			continue
+		}
+
+		idxOp := NewLiteralOperand(i)
+		elemAddr := g.currentFunc.NewTemp()
+		g.currentBlock.AddInstruction(NewGepInst(elemAddr, arrayPtr, idxOp))
+		g.currentBlock.AddInstruction(NewStoreInst(elemAddr, elemVal))
+	}
+
+	return arrayPtr
+}
+
 func (g *IRGenerator) generateLogicalAnd(be *ast.BinaryExprNode) *Operand {
-	// Вычисляем левую часть
 	leftVal := g.generateExpression(be.Left)
 	if leftVal == nil {
 		return nil
@@ -547,16 +699,13 @@ func (g *IRGenerator) generateLogicalAnd(be *ast.BinaryExprNode) *Operand {
 	rightBlock := g.currentFunc.NewBlock(g.newLabel("and_right"))
 	mergeBlock := g.currentFunc.NewBlock(g.newLabel("and_merge"))
 
-	// Если левая часть false, результат = false (short-circuit)
 	g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIfNot, leftVal, mergeBlock))
 	g.currentBlock.AddInstruction(NewMoveInst(result, NewLiteralOperand(false)))
 	g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
 
-	// Связываем блоки
 	g.currentBlock.AddSuccessor(mergeBlock)
 	mergeBlock.AddPredecessor(g.currentBlock)
 
-	// Правая часть вычисляется только если левая true
 	g.currentBlock = rightBlock
 	rightVal := g.generateExpression(be.Right)
 	if rightVal == nil {
@@ -570,7 +719,6 @@ func (g *IRGenerator) generateLogicalAnd(be *ast.BinaryExprNode) *Operand {
 		mergeBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// PHI узел в merge блоке для корректного SSA
 	g.currentBlock = mergeBlock
 	phiPairs := []PhiPair{
 		{Value: NewLiteralOperand(false), Block: mergeBlock.Predecessors[0]},
@@ -581,9 +729,7 @@ func (g *IRGenerator) generateLogicalAnd(be *ast.BinaryExprNode) *Operand {
 	return result
 }
 
-// generateLogicalOr генерирует short-circuit evaluation для ||
 func (g *IRGenerator) generateLogicalOr(be *ast.BinaryExprNode) *Operand {
-	// Вычисляем левую часть
 	leftVal := g.generateExpression(be.Left)
 	if leftVal == nil {
 		return nil
@@ -593,16 +739,13 @@ func (g *IRGenerator) generateLogicalOr(be *ast.BinaryExprNode) *Operand {
 	rightBlock := g.currentFunc.NewBlock(g.newLabel("or_right"))
 	mergeBlock := g.currentFunc.NewBlock(g.newLabel("or_merge"))
 
-	// Если левая часть true, результат = true (short-circuit)
 	g.currentBlock.AddInstruction(NewCondJumpInst(OpJmpIf, leftVal, mergeBlock))
 	g.currentBlock.AddInstruction(NewMoveInst(result, NewLiteralOperand(true)))
 	g.currentBlock.AddInstruction(NewJumpInst(mergeBlock))
 
-	// Связываем блоки
 	g.currentBlock.AddSuccessor(mergeBlock)
 	mergeBlock.AddPredecessor(g.currentBlock)
 
-	// Правая часть вычисляется только если левая false
 	g.currentBlock = rightBlock
 	rightVal := g.generateExpression(be.Right)
 	if rightVal == nil {
@@ -616,7 +759,6 @@ func (g *IRGenerator) generateLogicalOr(be *ast.BinaryExprNode) *Operand {
 		mergeBlock.AddPredecessor(g.currentBlock)
 	}
 
-	// PHI узел в merge блоке
 	g.currentBlock = mergeBlock
 	phiPairs := []PhiPair{
 		{Value: NewLiteralOperand(true), Block: mergeBlock.Predecessors[0]},
@@ -627,7 +769,6 @@ func (g *IRGenerator) generateLogicalOr(be *ast.BinaryExprNode) *Operand {
 	return result
 }
 
-// generateLiteral генерирует литерал
 func (g *IRGenerator) generateLiteral(lit *ast.LiteralExprNode) *Operand {
 	switch lit.TypeName {
 	case "int":
@@ -643,20 +784,27 @@ func (g *IRGenerator) generateLiteral(lit *ast.LiteralExprNode) *Operand {
 	}
 }
 
-// generateIdentifier генерирует идентификатор
 func (g *IRGenerator) generateIdentifier(ident *ast.IdentifierNode) *Operand {
-	// Проверяем локальные переменные
-	if addr, exists := g.varAddresses[ident.Value]; exists {
-		temp := g.currentFunc.NewTemp()
-		g.currentBlock.AddInstruction(NewLoadInst(temp, addr))
-		return temp
+	// Проверяем, массив ли это
+	if _, isArray := g.arrayAllocs[ident.Value]; isArray {
+		// Возвращаем указатель напрямую
+		if addr, exists := g.varAddresses[ident.Value]; exists {
+			return addr
+		}
 	}
 
-	// Проверяем параметры
+	// Проверяем, параметр ли это
 	for _, param := range g.currentFunc.Params {
 		if param.Name == ident.Value {
 			return NewVarOperand(ident.Value)
 		}
+	}
+
+	// Локальная переменная
+	if addr, exists := g.varAddresses[ident.Value]; exists {
+		temp := g.currentFunc.NewTemp()
+		g.currentBlock.AddInstruction(NewLoadInst(temp, addr))
+		return temp
 	}
 
 	// Глобальная переменная
@@ -665,7 +813,6 @@ func (g *IRGenerator) generateIdentifier(ident *ast.IdentifierNode) *Operand {
 	return temp
 }
 
-// generateBinaryExpr генерирует бинарное выражение (кроме && и ||)
 func (g *IRGenerator) generateBinaryExpr(be *ast.BinaryExprNode) *Operand {
 	left := g.generateExpression(be.Left)
 	right := g.generateExpression(be.Right)
@@ -708,7 +855,6 @@ func (g *IRGenerator) generateBinaryExpr(be *ast.BinaryExprNode) *Operand {
 	return temp
 }
 
-// generateUnaryExpr генерирует унарное выражение
 func (g *IRGenerator) generateUnaryExpr(ue *ast.UnaryExprNode) *Operand {
 	right := g.generateExpression(ue.Right)
 	if right == nil {
@@ -731,7 +877,6 @@ func (g *IRGenerator) generateUnaryExpr(ue *ast.UnaryExprNode) *Operand {
 	return temp
 }
 
-// generateCallExpr генерирует вызов функции
 func (g *IRGenerator) generateCallExpr(ce *ast.CallExprNode) *Operand {
 	var funcName string
 	if ident, ok := ce.Function.(*ast.IdentifierNode); ok {
@@ -740,14 +885,12 @@ func (g *IRGenerator) generateCallExpr(ce *ast.CallExprNode) *Operand {
 		return nil
 	}
 
-	// Генерируем аргументы и PARAM инструкции
 	args := make([]*Operand, len(ce.Arguments))
 	for i, arg := range ce.Arguments {
 		args[i] = g.generateExpression(arg)
 		if args[i] == nil {
 			return nil
 		}
-		// Добавляем PARAM инструкцию для каждого аргумента
 		g.currentBlock.AddInstruction(&Instruction{
 			Opcode: OpParam,
 			Src1:   NewLiteralOperand(i),
@@ -760,27 +903,36 @@ func (g *IRGenerator) generateCallExpr(ce *ast.CallExprNode) *Operand {
 	return temp
 }
 
-// generateAssignmentExpr генерирует выражение присваивания
 func (g *IRGenerator) generateAssignmentExpr(ae *ast.AssignmentExprNode) *Operand {
 	rightVal := g.generateExpression(ae.Right)
 	if rightVal == nil {
 		return nil
 	}
 
-	if ident, ok := ae.Left.(*ast.IdentifierNode); ok {
-		if addr, exists := g.varAddresses[ident.Value]; exists {
+	switch left := ae.Left.(type) {
+	case *ast.IdentifierNode:
+		if addr, exists := g.varAddresses[left.Value]; exists {
 			g.currentBlock.AddInstruction(NewStoreInst(addr, rightVal))
 			return rightVal
 		} else {
-			g.currentBlock.AddInstruction(NewStoreInst(NewGlobalOperand(ident.Value), rightVal))
+			g.currentBlock.AddInstruction(NewStoreInst(NewGlobalOperand(left.Value), rightVal))
 			return rightVal
 		}
+
+	case *ast.IndexExprNode:
+		arrayPtr := g.generateExpression(left.Array)
+		index := g.generateExpression(left.Index)
+		if arrayPtr != nil && index != nil {
+			elemAddr := g.currentFunc.NewTemp()
+			g.currentBlock.AddInstruction(NewGepInst(elemAddr, arrayPtr, index))
+			g.currentBlock.AddInstruction(NewStoreInst(elemAddr, rightVal))
+		}
+		return rightVal
 	}
 
 	return rightVal
 }
 
-// GetProgram возвращает сгенерированную программу
 func (g *IRGenerator) GetProgram() *Program {
 	return g.program
 }

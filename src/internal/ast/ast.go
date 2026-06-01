@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"fmt"
 	"mikrocompiler/src/internal/token"
 )
 
@@ -32,6 +33,10 @@ type Visitor interface {
 	VisitCallExpr(node *CallExprNode) interface{}
 	VisitAssignmentExpr(node *AssignmentExprNode) interface{}
 	VisitParameter(node *ParameterNode) interface{}
+	// Sprint 7: новые узлы
+	VisitExternFuncDecl(node *ExternFuncDeclNode) interface{}
+	VisitIndexExpr(node *IndexExprNode) interface{}
+	VisitArrayLiteralExpr(node *ArrayLiteralExprNode) interface{}
 }
 
 // ProgramNode - корневой узел программы
@@ -149,6 +154,23 @@ func (sd *StructDeclNode) Accept(v Visitor) interface{} {
 	return v.VisitStructDecl(sd)
 }
 
+// ExternFuncDeclNode объявление внешней функции (Sprint 7)
+type ExternFuncDeclNode struct {
+	Token      token.Token
+	Name       *IdentifierNode
+	Parameters []*ParameterNode
+	ReturnType *TypeNode
+}
+
+func (ed *ExternFuncDeclNode) declarationNode()     {}
+func (ed *ExternFuncDeclNode) TokenLiteral() string { return ed.Token.Lexeme }
+func (ed *ExternFuncDeclNode) String() string       { return "ExternFuncDecl" }
+func (ed *ExternFuncDeclNode) Line() int            { return ed.Token.Line }
+func (ed *ExternFuncDeclNode) Column() int          { return ed.Token.Column }
+func (ed *ExternFuncDeclNode) Accept(v Visitor) interface{} {
+	return v.VisitExternFuncDecl(ed)
+}
+
 // VarDeclNode объявление переменной
 type VarDeclNode struct {
 	Token       token.Token
@@ -199,6 +221,7 @@ func (is *IfStmtNode) Accept(v Visitor) interface{} {
 	return v.VisitIfStmt(is)
 }
 
+// WhileStmtNode цикл while
 type WhileStmtNode struct {
 	Token     token.Token
 	Condition ExpressionNode
@@ -214,6 +237,7 @@ func (ws *WhileStmtNode) Accept(v Visitor) interface{} {
 	return v.VisitWhileStmt(ws)
 }
 
+// ForStmtNode цикл for
 type ForStmtNode struct {
 	Token     token.Token
 	Init      StatementNode
@@ -379,15 +403,64 @@ func (ae *AssignmentExprNode) Accept(v Visitor) interface{} {
 func (ae *AssignmentExprNode) Type() *TypeAnnotation     { return ae.TypeAnnotation }
 func (ae *AssignmentExprNode) SetType(t *TypeAnnotation) { ae.TypeAnnotation = t }
 
+// IndexExprNode доступ к элементу массива (Sprint 7)
+type IndexExprNode struct {
+	Token          token.Token
+	Array          ExpressionNode
+	Index          ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (ie *IndexExprNode) expressionNode()      {}
+func (ie *IndexExprNode) TokenLiteral() string { return ie.Token.Lexeme }
+func (ie *IndexExprNode) String() string       { return "IndexExpr" }
+func (ie *IndexExprNode) Line() int            { return ie.Token.Line }
+func (ie *IndexExprNode) Column() int          { return ie.Token.Column }
+func (ie *IndexExprNode) Accept(v Visitor) interface{} {
+	return v.VisitIndexExpr(ie)
+}
+func (ie *IndexExprNode) Type() *TypeAnnotation     { return ie.TypeAnnotation }
+func (ie *IndexExprNode) SetType(t *TypeAnnotation) { ie.TypeAnnotation = t }
+
+// ArrayLiteralExprNode инициализатор массива (Sprint 7)
+type ArrayLiteralExprNode struct {
+	Token          token.Token
+	Elements       []ExpressionNode
+	TypeAnnotation *TypeAnnotation
+}
+
+func (al *ArrayLiteralExprNode) expressionNode()      {}
+func (al *ArrayLiteralExprNode) TokenLiteral() string { return al.Token.Lexeme }
+func (al *ArrayLiteralExprNode) String() string       { return "ArrayLiteral" }
+func (al *ArrayLiteralExprNode) Line() int            { return al.Token.Line }
+func (al *ArrayLiteralExprNode) Column() int          { return al.Token.Column }
+func (al *ArrayLiteralExprNode) Accept(v Visitor) interface{} {
+	return v.VisitArrayLiteralExpr(al)
+}
+func (al *ArrayLiteralExprNode) Type() *TypeAnnotation     { return al.TypeAnnotation }
+func (al *ArrayLiteralExprNode) SetType(t *TypeAnnotation) { al.TypeAnnotation = t }
+
+// TypeNode узел типа
 type TypeNode struct {
-	Token token.Token
-	Kind  string
-	Name  string
+	Token     token.Token
+	Kind      string
+	Name      string
+	BaseType  *TypeNode // Sprint 7: базовый тип для массивов
+	ArraySize int       // Sprint 7: размер массива (-1 если не указан)
 }
 
 func (t *TypeNode) String() string {
 	if t.Kind == "identifier" {
 		return t.Name
+	}
+	if t.Kind == "array" {
+		if t.BaseType != nil {
+			if t.ArraySize >= 0 {
+				return fmt.Sprintf("%s[%d]", t.BaseType.String(), t.ArraySize)
+			}
+			return t.BaseType.String() + "[]"
+		}
+		return "unknown[]"
 	}
 	return t.Kind
 }

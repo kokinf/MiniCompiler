@@ -21,6 +21,9 @@ const (
 	ErrFunctionNotFound     ErrorCode = "function_not_found"
 	ErrStructNotFound       ErrorCode = "struct_not_found"
 	ErrFieldNotFound        ErrorCode = "field_not_found"
+	ErrInvalidArraySize     ErrorCode = "invalid_array_size"          // Sprint 7
+	ErrInvalidArrayIndex    ErrorCode = "invalid_array_index"         // Sprint 7
+	ErrExternMismatch       ErrorCode = "extern_declaration_mismatch" // Sprint 7
 )
 
 type SemanticError struct {

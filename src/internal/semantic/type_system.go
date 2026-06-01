@@ -23,35 +23,43 @@ func NewTypeSystem() *TypeSystem {
 }
 
 func (ts *TypeSystem) IsNumeric(t *Type) bool {
-	return t.IsNumeric()
+	return t != nil && t.IsNumeric()
 }
 
 func (ts *TypeSystem) IsInteger(t *Type) bool {
-	return t.IsInteger()
+	return t != nil && t.IsInteger()
 }
 
 func (ts *TypeSystem) IsFloat(t *Type) bool {
-	return t.IsFloat()
+	return t != nil && t.IsFloat()
 }
 
 func (ts *TypeSystem) IsBool(t *Type) bool {
-	return t.IsBool()
+	return t != nil && t.IsBool()
 }
 
 func (ts *TypeSystem) IsVoid(t *Type) bool {
-	return t.IsVoid()
+	return t != nil && t.IsVoid()
 }
 
 func (ts *TypeSystem) IsString(t *Type) bool {
-	return t.IsString()
+	return t != nil && t.IsString()
 }
 
 func (ts *TypeSystem) IsStruct(t *Type) bool {
-	return t.IsStruct()
+	return t != nil && t.IsStruct()
 }
 
 func (ts *TypeSystem) IsFunction(t *Type) bool {
-	return t.IsFunction()
+	return t != nil && t.IsFunction()
+}
+
+func (ts *TypeSystem) IsArray(t *Type) bool {
+	return t != nil && t.IsArray()
+}
+
+func (ts *TypeSystem) IsPointer(t *Type) bool {
+	return t != nil && t.IsPointer()
 }
 
 func (ts *TypeSystem) BinaryOperationResult(op string, left, right *Type) (*Type, error) {
@@ -128,6 +136,10 @@ func (ts *TypeSystem) IsAssignable(target, source *Type) bool {
 		return true
 	}
 
+	if source.IsArray() && target.IsPointer() {
+		return source.BaseType.Equals(target.BaseType)
+	}
+
 	return false
 }
 
@@ -184,6 +196,10 @@ func (ts *TypeSystem) GetSize(t *Type) int {
 		return size
 	case TypeFunc:
 		return 8
+	case TypeArray:
+		return 8 // указатель
+	case TypePointer:
+		return 8
 	default:
 		return 0
 	}
@@ -212,6 +228,8 @@ func (ts *TypeSystem) GetAlignment(t *Type) int {
 			}
 		}
 		return maxAlign
+	case TypeArray, TypePointer:
+		return 8
 	default:
 		return 4
 	}
@@ -236,6 +254,10 @@ func (ts *TypeSystem) IsValidType(t *Type) bool {
 		return t.Name != ""
 	case TypeFunc:
 		return t.Return != nil
+	case TypeArray:
+		return t.BaseType != nil
+	case TypePointer:
+		return t.BaseType != nil
 	default:
 		return false
 	}
@@ -249,7 +271,7 @@ func (ts *TypeSystem) CanBeUsedInExpression(t *Type) bool {
 	switch t.Kind {
 	case TypeInt, TypeFloat, TypeBool, TypeString:
 		return true
-	case TypeStruct:
+	case TypeStruct, TypeArray, TypePointer:
 		return true
 	default:
 		return false

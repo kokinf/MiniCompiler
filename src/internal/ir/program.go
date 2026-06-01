@@ -4,6 +4,7 @@ import (
 	"strings"
 )
 
+// Program представляет всю программу в IR
 type Program struct {
 	Functions   []*Function
 	Globals     map[string]*GlobalVar
@@ -43,7 +44,6 @@ func (p *Program) AddGlobal(name, typ string, init *Operand) {
 func (p *Program) String() string {
 	var sb strings.Builder
 
-	// Глобальные переменные
 	if len(p.Globals) > 0 {
 		sb.WriteString("; Global variables:\n")
 		for name, g := range p.Globals {
@@ -60,7 +60,6 @@ func (p *Program) String() string {
 		sb.WriteString("\n")
 	}
 
-	// Функции
 	for i, f := range p.Functions {
 		if i > 0 {
 			sb.WriteString("\n")

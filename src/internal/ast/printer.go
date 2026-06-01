@@ -35,10 +35,27 @@ func (p *PrettyPrinter) Print(program *ProgramNode) string {
 			p.printStructDecl(d)
 		case *VarDeclNode:
 			p.printVarDecl(d, true)
+		case *ExternFuncDeclNode:
+			p.printExternFuncDecl(d)
 		}
 	}
 
 	return p.output.String()
+}
+
+func (p *PrettyPrinter) printExternFuncDecl(ed *ExternFuncDeclNode) {
+	p.output.WriteString(fmt.Sprintf("%sExternFuncDecl: %s -> %s [line %d]:\n",
+		p.indent(), ed.Name.Value, ed.ReturnType.String(), ed.Line()))
+	p.indentLevel++
+
+	p.output.WriteString(fmt.Sprintf("%sParameters:\n", p.indent()))
+	p.indentLevel++
+	for _, param := range ed.Parameters {
+		p.output.WriteString(fmt.Sprintf("%s%s\n", p.indent(), param.String()))
+	}
+	p.indentLevel--
+
+	p.indentLevel--
 }
 
 func (p *PrettyPrinter) printFunctionDecl(fd *FunctionDeclNode) {
@@ -83,7 +100,6 @@ func (p *PrettyPrinter) printVarDecl(vd *VarDeclNode, topLevel bool) {
 	typeStr := vd.Type.String()
 	p.output.WriteString(fmt.Sprintf("VarDecl: %s %s", typeStr, vd.Name.Value))
 
-	// Вывод аннотации типа для инициализатора
 	if vd.Initializer != nil {
 		p.output.WriteString(" = ")
 		p.printExpression(vd.Initializer)
@@ -256,9 +272,22 @@ func (p *PrettyPrinter) printExpression(expr ExpressionNode) {
 		p.printExpression(e.Left)
 		p.output.WriteString(" " + e.Operator + " ")
 		p.printExpression(e.Right)
+	case *IndexExprNode:
+		p.printExpression(e.Array)
+		p.output.WriteString("[")
+		p.printExpression(e.Index)
+		p.output.WriteString("]")
+	case *ArrayLiteralExprNode:
+		p.output.WriteString("{")
+		for i, elem := range e.Elements {
+			if i > 0 {
+				p.output.WriteString(", ")
+			}
+			p.printExpression(elem)
+		}
+		p.output.WriteString("}")
 	}
 
-	// Вывод аннотации типа если есть
 	if t := expr.Type(); t != nil {
 		p.output.WriteString(fmt.Sprintf(" [type: %s]", t.Kind))
 	}

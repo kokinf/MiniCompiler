@@ -16,16 +16,16 @@ const (
 )
 
 type Symbol struct {
-	Name   string
-	Kind   SymbolKind
-	Type   *Type
-	Line   int
-	Column int
-	Scope  *Scope
+	Name     string
+	Kind     SymbolKind
+	Type     *Type
+	Line     int
+	Column   int
+	Scope    *Scope
+	IsExtern bool // Sprint 7
 
 	Parameters []*Symbol
-
-	Fields map[string]*Symbol
+	Fields     map[string]*Symbol
 
 	Offset int
 	Size   int
@@ -141,7 +141,6 @@ func (st *SymbolTable) printScope(scope *Scope, indent int, result *string) {
 	}
 	*result += fmt.Sprintf("%s%s scope (level %d):\n", prefix, scope.name, scope.level)
 
-	// Сортируем символы по имени для детерминированного вывода
 	symbols := scope.GetAllSymbols()
 	sort.Slice(symbols, func(i, j int) bool {
 		if symbols[i].Line != symbols[j].Line {
@@ -151,8 +150,12 @@ func (st *SymbolTable) printScope(scope *Scope, indent int, result *string) {
 	})
 
 	for _, sym := range symbols {
-		*result += fmt.Sprintf("%s  %s: %s %s (line %d)\n",
-			prefix, sym.Name, sym.Kind, sym.Type.String(), sym.Line)
+		externTag := ""
+		if sym.IsExtern {
+			externTag = " [extern]"
+		}
+		*result += fmt.Sprintf("%s  %s: %s %s (line %d)%s\n",
+			prefix, sym.Name, sym.Kind, sym.Type.String(), sym.Line, externTag)
 	}
 	*result += "\n"
 }

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"strconv"
 
 	"mikrocompiler/src/internal/ast"
 	"mikrocompiler/src/internal/token"
@@ -57,16 +58,6 @@ func (p *Parser) expect(expected token.TokenType) bool {
 	return false
 }
 
-func (p *Parser) expectPeek(expected token.TokenType) bool {
-	if p.peek().Type == expected {
-		p.nextToken()
-		return true
-	}
-	p.addError(fmt.Sprintf("ожидался токен %s, получен %s (строка %d, колонка %d)",
-		expected, p.peek().Type, p.peek().Line, p.peek().Column))
-	return false
-}
-
 func (p *Parser) consume() token.Token {
 	tok := p.current
 	p.nextToken()
@@ -85,8 +76,9 @@ func (p *Parser) synchronize() {
 			return
 		}
 		switch p.current.Type {
-		case token.KW_FN, token.KW_STRUCT, token.KW_IF, token.KW_WHILE,
-			token.KW_FOR, token.KW_RETURN, token.RBRACE:
+		case token.KW_FN, token.KW_STRUCT, token.KW_EXTERN,
+			token.KW_IF, token.KW_WHILE, token.KW_FOR,
+			token.KW_RETURN, token.RBRACE:
 			return
 		}
 		p.nextToken()
@@ -120,22 +112,88 @@ func (p *Parser) parseDeclaration() ast.DeclarationNode {
 		return p.parseFunctionDecl()
 	case token.KW_STRUCT:
 		return p.parseStructDecl()
-	case token.KW_INT, token.KW_FLOAT, token.KW_BOOL, token.KW_STRING, token.IDENTIFIER:
-		return p.parseVarDecl()
+	case token.KW_EXTERN:
+		return p.parseExternDecl()
+	case token.KW_INT, token.KW_FLOAT, token.KW_BOOL, token.KW_STRING, token.KW_VOID, token.IDENTIFIER:
+		return p.parseVarDeclOrFuncDecl()
 	default:
 		p.addError(fmt.Sprintf("неожиданный токен в объявлении: %s", p.current.Type))
 		return nil
 	}
 }
 
+// parseExternDecl парсит extern объявление
+func (p *Parser) parseExternDecl() *ast.ExternFuncDeclNode {
+	externToken := p.consume() // съедаем 'extern'
+
+	// Парсим возвращаемый тип (может быть void, int, void*, etc.)
+	returnType := p.parseType()
+	if returnType == nil || returnType.Kind == "unknown" {
+		p.addError("ожидался тип возврата после extern")
+		return nil
+	}
+
+	// Имя функции
+	if p.current.Type != token.IDENTIFIER {
+		p.addError(fmt.Sprintf("ожидалось имя функции, получен %s", p.current.Type))
+		return nil
+	}
+
+	name := &ast.IdentifierNode{
+		Token: p.current,
+		Value: p.current.Lexeme,
+	}
+	p.nextToken()
+
+	// Открывающая скобка
+	if !p.expect(token.LPAREN) {
+		return nil
+	}
+
+	// Параметры
+	params := p.parseParameters()
+
+	// Закрывающая скобка
+	if !p.expect(token.RPAREN) {
+		return nil
+	}
+
+	// Точка с запятой
+	if p.current.Type == token.SEMICOLON {
+		p.nextToken()
+	}
+
+	return &ast.ExternFuncDeclNode{
+		Token:      externToken,
+		Name:       name,
+		Parameters: params,
+		ReturnType: returnType,
+	}
+}
+
 func (p *Parser) parseFunctionDecl() *ast.FunctionDeclNode {
-	fnToken := p.consume()
+	// Проверяем, есть ли уже тип возврата (из parseVarDeclOrFuncDecl)
+	var returnType *ast.TypeNode
+
+	// Если текущий токен - не 'fn', значит тип возврата уже спаршен
+	if p.current.Type != token.KW_FN {
+		returnType = p.parseType()
+	}
+
+	fnToken := p.current
+	if fnToken.Type != token.KW_FN {
+		// Это функция без 'fn', просто тип имя(...)
+		fnToken = returnType.Token
+	} else {
+		p.nextToken() // съедаем 'fn'
+	}
 
 	if p.current.Type != token.IDENTIFIER {
 		p.addError(fmt.Sprintf("ожидалось имя функции, получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
 		return nil
 	}
+
 	name := &ast.IdentifierNode{
 		Token: p.current,
 		Value: p.current.Lexeme,
@@ -145,20 +203,25 @@ func (p *Parser) parseFunctionDecl() *ast.FunctionDeclNode {
 	if !p.expect(token.LPAREN) {
 		return nil
 	}
+
 	params := p.parseParameters()
+
 	if !p.expect(token.RPAREN) {
 		return nil
 	}
 
-	returnType := &ast.TypeNode{Kind: "void"}
+	// Проверяем стрелку -> для типа возврата
 	if p.current.Type == token.ARROW {
 		p.nextToken()
-		t := p.parseType()
-		if t != nil {
-			returnType = t
-		}
+		returnType = p.parseType()
 	}
 
+	// Если тип возврата всё ещё не определён
+	if returnType == nil {
+		returnType = &ast.TypeNode{Kind: "void"}
+	}
+
+	// Только объявление (без тела)
 	if p.current.Type == token.SEMICOLON {
 		p.nextToken()
 		return &ast.FunctionDeclNode{
@@ -170,6 +233,7 @@ func (p *Parser) parseFunctionDecl() *ast.FunctionDeclNode {
 		}
 	}
 
+	// Тело функции
 	if p.current.Type != token.LBRACE {
 		p.addError(fmt.Sprintf("ожидался токен LBRACE или ';', получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
@@ -201,6 +265,11 @@ func (p *Parser) parseParameters() []*ast.ParameterNode {
 
 	for p.current.Type == token.COMMA {
 		p.nextToken()
+		// Проверяем на variadic (...)
+		if p.current.Type == token.ELLIPSIS {
+			p.nextToken()
+			break
+		}
 		param := p.parseParameter()
 		if param != nil {
 			params = append(params, param)
@@ -211,80 +280,51 @@ func (p *Parser) parseParameters() []*ast.ParameterNode {
 }
 
 func (p *Parser) parseParameter() *ast.ParameterNode {
-
-	first := p.current
-
-	if first.Type == token.KW_INT || first.Type == token.KW_FLOAT ||
-		first.Type == token.KW_BOOL || first.Type == token.KW_STRING {
-		paramType := p.parseType()
-
-		if p.current.Type != token.IDENTIFIER {
-			p.addError(fmt.Sprintf("ожидалось имя параметра, получен %s (строка %d, колонка %d)",
-				p.current.Type, p.current.Line, p.current.Column))
-			return nil
-		}
-
-		name := &ast.IdentifierNode{
-			Token: p.current,
-			Value: p.current.Lexeme,
-		}
+	// Проверяем на variadic
+	if p.current.Type == token.ELLIPSIS {
 		p.nextToken()
-
-		return &ast.ParameterNode{
-			Token: paramType.Token,
-			Type:  paramType,
-			Name:  name,
-		}
-	}
-
-	if first.Type == token.IDENTIFIER {
-		next := p.peek()
-
-		if next.Type == token.KW_INT || next.Type == token.KW_FLOAT ||
-			next.Type == token.KW_BOOL || next.Type == token.KW_STRING {
-			name := &ast.IdentifierNode{
-				Token: first,
-				Value: first.Lexeme,
-			}
-			p.nextToken()
-			paramType := p.parseType()
-
-			return &ast.ParameterNode{
-				Token: paramType.Token,
-				Type:  paramType,
-				Name:  name,
-			}
-		}
-
-		if next.Type == token.IDENTIFIER {
-			paramType := &ast.TypeNode{
-				Token: first,
-				Kind:  "identifier",
-				Name:  first.Lexeme,
-			}
-			p.nextToken()
-
-			name := &ast.IdentifierNode{
-				Token: p.current,
-				Value: p.current.Lexeme,
-			}
-			p.nextToken()
-
-			return &ast.ParameterNode{
-				Token: paramType.Token,
-				Type:  paramType,
-				Name:  name,
-			}
-		}
-
-		p.addError(fmt.Sprintf("неожиданный токен после имени параметра: %s (строка %d, колонка %d)",
-			next.Type, next.Line, next.Column))
 		return nil
 	}
 
-	p.addError(fmt.Sprintf("ожидалось имя параметра или тип, получен %s (строка %d, колонка %d)",
-		first.Type, first.Line, first.Column))
-	return nil
+	// Парсим тип параметра
+	paramType := p.parseType()
+	if paramType == nil || paramType.Kind == "unknown" {
+		p.addError(fmt.Sprintf("ожидался тип параметра, получен %s", p.current.Type))
+		return nil
+	}
+
+	// Имя параметра
+	if p.current.Type != token.IDENTIFIER {
+		p.addError(fmt.Sprintf("ожидалось имя параметра, получен %s", p.current.Type))
+		return nil
+	}
+
+	name := &ast.IdentifierNode{
+		Token: p.current,
+		Value: p.current.Lexeme,
+	}
+	p.nextToken()
+
+	// Проверяем на массив (arr[])
+	if p.current.Type == token.LBRACKET {
+		p.nextToken()
+		if !p.expect(token.RBRACKET) {
+			return nil
+		}
+		// Превращаем тип в массив
+		paramType = &ast.TypeNode{
+			Token:     paramType.Token,
+			Kind:      "array",
+			BaseType:  paramType,
+			ArraySize: -1,
+		}
+	}
+
+	return &ast.ParameterNode{
+		Token: paramType.Token,
+		Type:  paramType,
+		Name:  name,
+	}
 }
 
 func (p *Parser) parseStructDecl() *ast.StructDeclNode {
@@ -362,24 +402,19 @@ func (p *Parser) parseStructDecl() *ast.StructDeclNode {
 	}
 }
 
-func (p *Parser) parseVarDecl() ast.DeclarationNode {
-	if p.current.Type != token.KW_INT && p.current.Type != token.KW_FLOAT &&
-		p.current.Type != token.KW_BOOL && p.current.Type != token.KW_STRING &&
-		p.current.Type != token.IDENTIFIER {
-		p.addError(fmt.Sprintf("ожидался тип, получен %s (строка %d, колонка %d)",
-			p.current.Type, p.current.Line, p.current.Column))
-		return nil
-	}
+// parseVarDeclOrFuncDecl различает объявление переменной и функции
+func (p *Parser) parseVarDeclOrFuncDecl() ast.DeclarationNode {
+	savedPos := p.position
+	savedCur := p.current
 
+	// Парсим тип (int, float, void, etc.)
 	varType := p.parseType()
 	if varType.Kind == "unknown" {
 		return nil
 	}
 
 	if p.current.Type != token.IDENTIFIER {
-		p.addError(fmt.Sprintf("ожидалось имя переменной, получен %s (строка %d, колонка %d)",
-			p.current.Type, p.current.Line, p.current.Column))
-		p.synchronize()
+		p.addError(fmt.Sprintf("ожидалось имя, получен %s", p.current.Type))
 		return nil
 	}
 
@@ -389,10 +424,43 @@ func (p *Parser) parseVarDecl() ast.DeclarationNode {
 	}
 	p.nextToken()
 
+	// Проверяем на массив: int arr[5]
+	if p.current.Type == token.LBRACKET {
+		p.nextToken()
+		if p.current.Type == token.INT_LITERAL {
+			size, err := strconv.Atoi(p.current.Lexeme)
+			if err == nil && size >= 0 {
+				varType = &ast.TypeNode{
+					Token:     varType.Token,
+					Kind:      "array",
+					BaseType:  varType,
+					ArraySize: size,
+				}
+			}
+			p.nextToken()
+		}
+		if !p.expect(token.RBRACKET) {
+			return nil
+		}
+	}
+
+	// Если следующая скобка - это функция
+	if p.current.Type == token.LPAREN {
+		// Восстанавливаем позицию и парсим как функцию с типом возврата
+		p.position = savedPos
+		p.current = savedCur
+		return p.parseFunctionDecl()
+	}
+
+	// Иначе это переменная
 	var initializer ast.ExpressionNode = nil
 	if p.current.Type == token.ASSIGN {
 		p.nextToken()
-		initializer = p.parseExpression()
+		if p.current.Type == token.LBRACE {
+			initializer = p.parseArrayLiteral()
+		} else {
+			initializer = p.parseExpression()
+		}
 	}
 
 	if p.current.Type != token.SEMICOLON {
@@ -408,6 +476,38 @@ func (p *Parser) parseVarDecl() ast.DeclarationNode {
 		Type:        varType,
 		Name:        name,
 		Initializer: initializer,
+	}
+}
+
+func (p *Parser) parseVarDecl() ast.DeclarationNode {
+	return p.parseVarDeclOrFuncDecl()
+}
+
+func (p *Parser) parseArrayLiteral() *ast.ArrayLiteralExprNode {
+	tok := p.current
+	p.nextToken()
+
+	elements := []ast.ExpressionNode{}
+
+	if p.current.Type != token.RBRACE {
+		elements = append(elements, p.parseExpression())
+
+		for p.current.Type == token.COMMA {
+			p.nextToken()
+			if p.current.Type == token.RBRACE {
+				break
+			}
+			elements = append(elements, p.parseExpression())
+		}
+	}
+
+	if !p.expect(token.RBRACE) {
+		return nil
+	}
+
+	return &ast.ArrayLiteralExprNode{
+		Token:    tok,
+		Elements: elements,
 	}
 }
 
@@ -432,29 +532,6 @@ func (p *Parser) parseStatement() ast.StatementNode {
 		}
 		return nil
 	case token.IDENTIFIER:
-		next := p.peek()
-		// Проверяем, это объявление переменной или выражение
-		if next.Type == token.IDENTIFIER {
-			// identifier identifier может быть объявлением с пользовательским типом
-			decl := p.parseVarDecl()
-			if decl != nil {
-				if vd, ok := decl.(*ast.VarDeclNode); ok {
-					return vd
-				}
-			}
-			return nil
-		}
-		if next.Type == token.KW_INT || next.Type == token.KW_FLOAT ||
-			next.Type == token.KW_BOOL || next.Type == token.KW_STRING {
-			decl := p.parseVarDecl()
-			if decl != nil {
-				if vd, ok := decl.(*ast.VarDeclNode); ok {
-					return vd
-				}
-			}
-			return nil
-		}
-		// Иначе это выражение (присваивание или вызов функции)
 		return p.parseExprStmt()
 	case token.SEMICOLON:
 		p.nextToken()
@@ -579,31 +656,14 @@ func (p *Parser) parseForStmt() *ast.ForStmtNode {
 		return nil
 	}
 
-	// Инициализация может быть VarDecl или ExprStmt, или пусто
 	if p.current.Type != token.SEMICOLON {
 		if p.current.Type == token.KW_INT || p.current.Type == token.KW_FLOAT ||
 			p.current.Type == token.KW_BOOL || p.current.Type == token.KW_STRING {
-			// Встроенное объявление переменной for (int i = 0; ...)
 			decl := p.parseVarDecl()
 			if decl != nil {
 				if vd, ok := decl.(*ast.VarDeclNode); ok {
 					forStmt.Init = vd
 				}
-			}
-		} else if p.current.Type == token.IDENTIFIER {
-			next := p.peek()
-			if next.Type == token.KW_INT || next.Type == token.KW_FLOAT ||
-				next.Type == token.KW_BOOL || next.Type == token.KW_STRING ||
-				next.Type == token.IDENTIFIER {
-				decl := p.parseVarDecl()
-				if decl != nil {
-					if vd, ok := decl.(*ast.VarDeclNode); ok {
-						forStmt.Init = vd
-					}
-				}
-			} else {
-				// Выражение инициализация for (i = 0; ...)
-				forStmt.Init = p.parseExprStmt()
 			}
 		} else {
 			forStmt.Init = p.parseExprStmt()
@@ -612,7 +672,6 @@ func (p *Parser) parseForStmt() *ast.ForStmtNode {
 		p.nextToken()
 	}
 
-	// Условие
 	if p.current.Type != token.SEMICOLON {
 		forStmt.Condition = p.parseExpression()
 	}
@@ -620,7 +679,6 @@ func (p *Parser) parseForStmt() *ast.ForStmtNode {
 		return nil
 	}
 
-	// Обновление
 	if p.current.Type != token.RPAREN {
 		forStmt.Update = p.parseExpression()
 	}
@@ -628,7 +686,6 @@ func (p *Parser) parseForStmt() *ast.ForStmtNode {
 		return nil
 	}
 
-	// Тело цикла
 	if p.current.Type == token.LBRACE {
 		forStmt.Body = p.parseBlockStmt()
 	} else {
@@ -692,7 +749,10 @@ func (p *Parser) parseAssignment() ast.ExpressionNode {
 		p.current.Type == token.MULTIPLY_ASSIGN ||
 		p.current.Type == token.DIVIDE_ASSIGN {
 
-		if _, ok := expr.(*ast.IdentifierNode); !ok {
+		switch expr.(type) {
+		case *ast.IdentifierNode, *ast.IndexExprNode:
+			// Допустимо
+		default:
 			p.addError(fmt.Sprintf("левая часть присваивания должна быть идентификатором (строка %d, колонка %d)",
 				p.current.Line, p.current.Column))
 			p.nextToken()
@@ -854,7 +914,7 @@ func (p *Parser) parseUnary() ast.ExpressionNode {
 		}
 	}
 
-	if p.current.Type == token.NOT || p.current.Type == token.NOT_EQ {
+	if p.current.Type == token.NOT {
 		tok := p.current
 		p.nextToken()
 		right := p.parseUnary()
@@ -865,14 +925,15 @@ func (p *Parser) parseUnary() ast.ExpressionNode {
 		}
 	}
 
-	return p.parseCall()
+	return p.parsePostfix()
 }
 
-func (p *Parser) parseCall() ast.ExpressionNode {
+func (p *Parser) parsePostfix() ast.ExpressionNode {
 	expr := p.parsePrimary()
 
-	for p.current.Type == token.LPAREN || p.current.Type == token.DOT {
-		if p.current.Type == token.LPAREN {
+	for {
+		switch p.current.Type {
+		case token.LPAREN:
 			tok := p.current
 			p.nextToken()
 			args := []ast.ExpressionNode{}
@@ -895,7 +956,21 @@ func (p *Parser) parseCall() ast.ExpressionNode {
 				Function:  expr,
 				Arguments: args,
 			}
-		} else if p.current.Type == token.DOT {
+
+		case token.LBRACKET:
+			tok := p.current
+			p.nextToken()
+			index := p.parseExpression()
+			if !p.expect(token.RBRACKET) {
+				return expr
+			}
+			expr = &ast.IndexExprNode{
+				Token: tok,
+				Array: expr,
+				Index: index,
+			}
+
+		case token.DOT:
 			p.nextToken()
 			if p.current.Type == token.IDENTIFIER {
 				field := &ast.IdentifierNode{
@@ -905,10 +980,10 @@ func (p *Parser) parseCall() ast.ExpressionNode {
 				p.nextToken()
 				expr = field
 			}
+		default:
+			return expr
 		}
 	}
-
-	return expr
 }
 
 func (p *Parser) parsePrimary() ast.ExpressionNode {
@@ -960,6 +1035,8 @@ func (p *Parser) parsePrimary() ast.ExpressionNode {
 		}
 		p.nextToken()
 		return lit
+	case token.LBRACE:
+		return p.parseArrayLiteral()
 	case token.ILLEGAL:
 		p.addError(p.current.Lexeme)
 		p.nextToken()
@@ -979,34 +1056,68 @@ func (p *Parser) parsePrimary() ast.ExpressionNode {
 }
 
 func (p *Parser) parseType() *ast.TypeNode {
+	var baseType *ast.TypeNode
+
 	switch p.current.Type {
 	case token.KW_INT:
-		t := &ast.TypeNode{Token: p.current, Kind: "int"}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "int"}
 		p.nextToken()
-		return t
 	case token.KW_FLOAT:
-		t := &ast.TypeNode{Token: p.current, Kind: "float"}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "float"}
 		p.nextToken()
-		return t
 	case token.KW_BOOL:
-		t := &ast.TypeNode{Token: p.current, Kind: "bool"}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "bool"}
 		p.nextToken()
-		return t
 	case token.KW_VOID:
-		t := &ast.TypeNode{Token: p.current, Kind: "void"}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "void"}
 		p.nextToken()
-		return t
 	case token.KW_STRING:
-		t := &ast.TypeNode{Token: p.current, Kind: "string"}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "string"}
 		p.nextToken()
-		return t
 	case token.IDENTIFIER:
-		t := &ast.TypeNode{Token: p.current, Kind: "identifier", Name: p.current.Lexeme}
+		baseType = &ast.TypeNode{Token: p.current, Kind: "identifier", Name: p.current.Lexeme}
 		p.nextToken()
-		return t
 	default:
 		p.addError(fmt.Sprintf("ожидался тип, получен %s (строка %d, колонка %d)",
 			p.current.Type, p.current.Line, p.current.Column))
 		return &ast.TypeNode{Kind: "unknown"}
 	}
+
+	// Проверяем на указатель (*)
+	if p.current.Type == token.MULTIPLY {
+		p.nextToken()
+		baseType = &ast.TypeNode{
+			Token:    baseType.Token,
+			Kind:     "pointer",
+			BaseType: baseType,
+		}
+	}
+
+	// Проверяем на массив ([])
+	for p.current.Type == token.LBRACKET {
+		p.nextToken()
+
+		arrayType := &ast.TypeNode{
+			Token:     baseType.Token,
+			Kind:      "array",
+			BaseType:  baseType,
+			ArraySize: -1,
+		}
+
+		if p.current.Type == token.INT_LITERAL {
+			size, err := strconv.Atoi(p.current.Lexeme)
+			if err == nil && size >= 0 {
+				arrayType.ArraySize = size
+			}
+			p.nextToken()
+		}
+
+		if !p.expect(token.RBRACKET) {
+			return &ast.TypeNode{Kind: "unknown"}
+		}
+
+		baseType = arrayType
+	}
+
+	return baseType
 }

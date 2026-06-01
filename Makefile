@@ -142,7 +142,7 @@ ir-stats: build
 	$(OUTPUT_FULL) ir --input examples/factorial.src --stats
 
 # ============================================================================
-# Компиляция в ассемблер
+# Компиляция в ассемблер (Sprint 7)
 # ============================================================================
 
 .PHONY: compile
@@ -151,35 +151,93 @@ compile: build
 	$(OUTPUT_FULL) compile --input examples/factorial.src --output build/program.asm
 	@echo "$(GREEN)Ассемблерный код: build/program.asm$(NC)"
 
+.PHONY: compile-opt
+compile-opt: build
+	@echo "$(YELLOW)Компиляция с оптимизациями factorial.src...$(NC)"
+	$(OUTPUT_FULL) compile --input examples/factorial.src --output build/program_opt.asm --optimize
+	@echo "$(GREEN)Оптимизированный ассемблерный код: build/program_opt.asm$(NC)"
+
 .PHONY: build-asm
 build-asm:
 	@echo "$(YELLOW)Сборка исполняемого файла...$(NC)"
 	@if [ -f build/program.asm ]; then \
-		nasm -f elf64 build/program.asm -o build/program.o; \
-		nasm -f elf64 src/runtime/runtime.asm -o build/runtime.o; \
-		ld -o build/program build/runtime.o build/program.o; \
+		nasm -f elf64 -o build/program.o build/program.asm; \
+		nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm; \
+		gcc -no-pie -o build/program build/runtime.o build/program.o; \
 		echo "$(GREEN)Исполняемый файл: build/program$(NC)"; \
 	else \
 		echo "$(RED)Сначала выполните: make compile$(NC)"; \
 	fi
 
+.PHONY: build-asm-opt
+build-asm-opt:
+	@echo "$(YELLOW)Сборка оптимизированного исполняемого файла...$(NC)"
+	@if [ -f build/program_opt.asm ]; then \
+		nasm -f elf64 -o build/program_opt.o build/program_opt.asm; \
+		nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm; \
+		gcc -no-pie -o build/program_opt build/runtime.o build/program_opt.o; \
+		echo "$(GREEN)Исполняемый файл: build/program_opt$(NC)"; \
+	else \
+		echo "$(RED)Сначала выполните: make compile-opt$(NC)"; \
+	fi
+
+# ============================================================================
+# Демонстрационная программа (Sprint 7)
+# ============================================================================
+
+.PHONY: demo
+demo: build
+	@echo "$(YELLOW)╔══════════════════════════════════════════╗$(NC)"
+	@echo "$(YELLOW)║  MiniCompiler Sprint 7 Demo: Quicksort   ║$(NC)"
+	@echo "$(YELLOW)╚══════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(CYAN)1. Компиляция quicksort.src...$(NC)"
+	$(OUTPUT_FULL) compile --input examples/quicksort.src --output build/quicksort.asm --optimize
+	@echo ""
+	@echo "$(CYAN)2. Ассемблирование...$(NC)"
+	nasm -f elf64 -o build/quicksort.o build/quicksort.asm
+	nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm
+	@echo ""
+	@echo "$(CYAN)3. Линковка с libc...$(NC)"
+	gcc -no-pie -o build/quicksort build/runtime.o build/quicksort.o
+	@echo ""
+	@echo "$(CYAN)4. Запуск программы...$(NC)"
+	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
+	./build/quicksort
+	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
+	@echo ""
+	@echo "$(GREEN)Демонстрация завершена успешно!$(NC)"
+
+.PHONY: demo-verbose
+demo-verbose: build
+	@echo "$(YELLOW)Демонстрация с подробным выводом...$(NC)"
+	@echo ""
+	@echo "$(CYAN)Исходный код:$(NC)"
+	@cat examples/quicksort.src
+	@echo ""
+	@echo "$(CYAN)Генерация IR...$(NC)"
+	$(OUTPUT_FULL) ir --input examples/quicksort.src --stats
+	@echo ""
+	@echo "$(CYAN)Компиляция...$(NC)"
+	$(OUTPUT_FULL) compile --input examples/quicksort.src --output build/quicksort.asm --optimize
+	@echo ""
+	@echo "$(CYAN)Сгенерированный ассемблер (первые 60 строк):$(NC)"
+	@head -60 build/quicksort.asm
+	@echo "..."
+	@echo ""
+	@echo "$(CYAN)Сборка и запуск...$(NC)"
+	nasm -f elf64 -o build/quicksort.o build/quicksort.asm
+	nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm
+	gcc -no-pie -o build/quicksort build/runtime.o build/quicksort.o
+	@echo "$(GREEN)Вывод программы:$(NC)"
+	./build/quicksort
+
 # ============================================================================
 # Тестирование
 # ============================================================================
 
-# Генерация тестов Control Flow (Sprint 6)
-.PHONY: gen-cf-tests
-gen-cf-tests:
-	@echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"
-	@bash scripts/generate_tests.sh
-	@echo "$(GREEN)Тесты сгенерированы$(NC)"
-
 .PHONY: test
 test: build
-	@if [ ! -d tests/control_flow/valid ]; then \
-		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
-		bash scripts/generate_tests.sh; \
-	fi
 	@echo "$(YELLOW)Запуск всех тестов...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh all; \
@@ -215,23 +273,22 @@ test-ir: build
 		cd tests/test_runner && bash run_tests.sh ir; \
 	fi
 
+.PHONY: test-codegen
+test-codegen: build
+	@echo "$(YELLOW)Запуск тестов кодогенерации...$(NC)"
+	@if [ -f tests/test_runner/run_tests.sh ]; then \
+		cd tests/test_runner && bash run_tests.sh codegen; \
+	fi
+
 .PHONY: test-control-flow
 test-control-flow: build
-	@if [ ! -d tests/control_flow/valid ]; then \
-		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
-		bash scripts/generate_tests.sh; \
-	fi
-	@echo "$(YELLOW)Запуск тестов Control Flow (Sprint 6)...$(NC)"
+	@echo "$(YELLOW)Запуск тестов Control Flow...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh control-flow; \
 	fi
 
 .PHONY: test-control-flow-verbose
 test-control-flow-verbose: build
-	@if [ ! -d tests/control_flow/valid ]; then \
-		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
-		bash scripts/generate_tests.sh; \
-	fi
 	@echo "$(YELLOW)Запуск тестов Control Flow (verbose)...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh control-flow true; \
@@ -244,10 +301,6 @@ test-go:
 
 .PHONY: test-all
 test-all: build test-go
-	@if [ ! -d tests/control_flow/valid ]; then \
-		echo "$(YELLOW)Генерация тестов Control Flow...$(NC)"; \
-		bash scripts/generate_tests.sh; \
-	fi
 	@echo "$(YELLOW)Запуск integration тестов...$(NC)"
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh all; \
@@ -313,6 +366,7 @@ clean:
 	@echo "$(YELLOW)Очистка артефактов сборки...$(NC)"
 	-$(RM) $(OUTPUT_FULL)
 	-$(RMDIR) $(OUTPUT_DIR)
+	-$(RMDIR) build
 	-$(RM) cfg.dot cfg.png ast.dot ast.png *.ir
 	$(GO) clean
 	@echo "$(GREEN)Очистка завершена$(NC)"
@@ -403,9 +457,15 @@ help:
 	@echo "  make check-types     - Семантический анализ с выводом типов"
 	@echo "  make symbols         - Вывести таблицу символов"
 	@echo "  make compile         - Скомпилировать в ассемблер"
+	@echo "  make compile-opt     - Скомпилировать с оптимизациями"
 	@echo "  make build-asm       - Собрать исполняемый файл"
+	@echo "  make build-asm-opt   - Собрать оптимизированный исполняемый файл"
 	@echo "  make install         - Установить в GOPATH/bin"
 	@echo "  make dev             - Запуск в режиме разработки"
+	@echo ""
+	@echo "$(YELLOW)Демонстрация (Sprint 7):$(NC)"
+	@echo "  make demo            - Запустить демо (Quicksort)"
+	@echo "  make demo-verbose    - Демо с подробным выводом"
 	@echo ""
 	@echo "$(YELLOW)Генерация IR:$(NC)"
 	@echo "  make ir              - Сгенерировать IR для factorial.src"
@@ -420,9 +480,9 @@ help:
 	@echo "  make test-parser           - Запустить только тесты парсера"
 	@echo "  make test-semantic         - Запустить только семантические тесты"
 	@echo "  make test-ir               - Запустить тесты IR"
-	@echo "  make test-control-flow     - Тесты Control Flow (Sprint 6)"
+	@echo "  make test-codegen          - Запустить тесты кодогенерации"
+	@echo "  make test-control-flow     - Тесты Control Flow"
 	@echo "  make test-control-flow-verbose - Тесты Control Flow подробно"
-	@echo "  make gen-cf-tests          - Сгенерировать тесты Control Flow"
 	@echo "  make test-go               - Запустить Go unit тесты"
 	@echo "  make test-all              - Запустить все тесты (unit + integration)"
 	@echo ""
@@ -475,6 +535,9 @@ ir:
 
 ir-opt:
 	$(OUTPUT_FULL) ir --input examples\factorial.src --optimize --stats
+
+compile:
+	$(OUTPUT_FULL) compile --input examples\factorial.src --output build\program.asm
 
 test:
 	@if exist tests\test_runner\run_tests.bat ( \

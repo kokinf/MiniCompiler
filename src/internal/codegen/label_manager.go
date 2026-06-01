@@ -37,11 +37,9 @@ func (lm *LabelManager) GetLabel(name string) string {
 
 // sanitizeLabel преобразует имя метки в допустимый ассемблерный идентификатор
 func (lm *LabelManager) sanitizeLabel(name string) string {
-	// Заменяем недопустимые символы
 	name = strings.ReplaceAll(name, "-", "_")
 	name = strings.ReplaceAll(name, ".", "_")
 
-	// Убеждаемся, что метка начинается с допустимого префикса
 	if !strings.HasPrefix(name, ".L") {
 		name = ".L" + name
 	}

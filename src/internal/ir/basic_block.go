@@ -21,8 +21,8 @@ type BasicBlock struct {
 	Children  []*BasicBlock
 
 	// Def-Use цепочки
-	Defs map[string]*Instruction   // инструкция определения
-	Uses map[string][]*Instruction // список использований
+	Defs map[string]*Instruction
+	Uses map[string][]*Instruction
 }
 
 // NewBasicBlock создает новый базовый блок
@@ -43,12 +43,10 @@ func NewBasicBlock(label string) *BasicBlock {
 func (b *BasicBlock) AddInstruction(inst *Instruction) {
 	b.Instructions = append(b.Instructions, inst)
 
-	// Обновляем Def-Use цепочки
 	if inst.Dest != nil {
 		b.Defs[inst.Dest.Name] = inst
 	}
 
-	// Регистрируем использования
 	for _, operand := range inst.GetUsedOperands() {
 		b.Uses[operand.Name] = append(b.Uses[operand.Name], inst)
 	}
@@ -124,7 +122,6 @@ func (b *BasicBlock) String() string {
 	sb.WriteString(b.Label)
 	sb.WriteString(":\n")
 
-	// Предшественники в комментарии
 	if len(b.Predecessors) > 0 {
 		preds := make([]string, len(b.Predecessors))
 		for i, p := range b.Predecessors {
@@ -133,7 +130,6 @@ func (b *BasicBlock) String() string {
 		fmt.Fprintf(&sb, "  ; preds: %s\n", strings.Join(preds, ", "))
 	}
 
-	// Dominator информация
 	if b.Dominator != nil {
 		fmt.Fprintf(&sb, "  ; idom: %s\n", b.Dominator.Label)
 	}

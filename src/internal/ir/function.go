@@ -15,17 +15,18 @@ type Function struct {
 	EntryBlock *BasicBlock
 	ExitBlock  *BasicBlock
 
-	Locals map[string]*VarInfo
+	Locals   map[string]*VarInfo
+	IsExtern bool
 
 	tempCounter  int
 	labelCounter int
 
-	// Dominator tree
 	DominatorTree map[string]*BasicBlock
+	GlobalDefs    map[string]*Instruction
+	GlobalUses    map[string][]*Instruction
 
-	// Def-Use chain для всей функции
-	GlobalDefs map[string]*Instruction
-	GlobalUses map[string][]*Instruction
+	// Sprint 7: для распространения констант между блоками
+	blockConstants map[string]map[string]*Operand
 }
 
 // Param представляет параметр функции
@@ -38,8 +39,8 @@ type Param struct {
 type VarInfo struct {
 	Name   string
 	Type   string
-	Offset int // смещение в стеке
-	Size   int // в байтах
+	Offset int
+	Size   int
 }
 
 // NewFunction создает новую функцию
@@ -97,14 +98,12 @@ func (f *Function) BuildDominatorTree() {
 		return
 	}
 
-	// Для каждого блока находим ближайшего доминатора
 	for _, block := range f.Blocks {
 		if block == f.EntryBlock {
 			block.Dominator = nil
 			continue
 		}
 
-		// Ищем общего доминатора среди предшественников
 		var dominator *BasicBlock
 		for _, pred := range block.Predecessors {
 			if dominator == nil {
@@ -173,8 +172,12 @@ func (f *Function) GetDefUseChain(varName string) (*Instruction, []*Instruction)
 func (f *Function) String() string {
 	var sb strings.Builder
 
-	// Сигнатура функции
-	fmt.Fprintf(&sb, "function %s: %s (", f.Name, f.ReturnType)
+	if f.IsExtern {
+		fmt.Fprintf(&sb, "extern function %s: %s (", f.Name, f.ReturnType)
+	} else {
+		fmt.Fprintf(&sb, "function %s: %s (", f.Name, f.ReturnType)
+	}
+
 	params := make([]string, len(f.Params))
 	for i, p := range f.Params {
 		params[i] = fmt.Sprintf("%s %s", p.Type, p.Name)
@@ -182,7 +185,10 @@ func (f *Function) String() string {
 	sb.WriteString(strings.Join(params, ", "))
 	sb.WriteString(")\n")
 
-	// Локальные переменные
+	if f.IsExtern {
+		return sb.String()
+	}
+
 	if len(f.Locals) > 0 {
 		names := make([]string, 0, len(f.Locals))
 		for name := range f.Locals {
@@ -197,7 +203,6 @@ func (f *Function) String() string {
 		}
 	}
 
-	// Базовые блоки
 	for _, block := range f.Blocks {
 		sb.WriteString("\n")
 		sb.WriteString(block.String())

@@ -79,7 +79,6 @@ func (s *Scanner) PeekToken() token.Token {
 		return *s.peekedToken
 	}
 
-	// Сохраняем состояние
 	savedPos := s.position
 	savedReadPos := s.readPosition
 	savedCh := s.ch
@@ -88,7 +87,6 @@ func (s *Scanner) PeekToken() token.Token {
 
 	tok := s.NextToken()
 
-	// Восстанавливаем состояние
 	s.position = savedPos
 	s.readPosition = savedReadPos
 	s.ch = savedCh
@@ -109,21 +107,17 @@ func (s *Scanner) NextToken() token.Token {
 
 	s.skipWhitespace()
 
-	// Сохраняем позицию для ошибок в комментариях
 	line, column := s.line, s.column
 
-	// Обработка комментариев
 	for s.ch == '/' && (s.peekChar() == '/' || s.peekChar() == '*') {
 		if s.peekChar() == '/' {
 			s.skipSingleLineComment()
 		} else {
 			if s.skipMultiLineComment() {
-				// Незакрытый многострочный комментарий
 				return s.newIllegalToken("незакрытый многострочный комментарий", line, column)
 			}
 		}
 		s.skipWhitespace()
-		// Обновляем позицию для возможной следующей итерации
 		line, column = s.line, s.column
 	}
 
@@ -131,7 +125,6 @@ func (s *Scanner) NextToken() token.Token {
 		return token.NewToken(token.EOF, "", s.line, 1)
 	}
 
-	// Обновляем позицию после обработки комментариев
 	line, column = s.line, s.column
 
 	switch s.ch {
@@ -292,6 +285,14 @@ func (s *Scanner) NextToken() token.Token {
 		s.readChar()
 		return tok
 	case '.':
+		// Проверяем на variadic (...)
+		if s.peekChar() == '.' && s.readPosition+1 < len(s.input) && s.input[s.readPosition+1] == '.' {
+			s.readChar()
+			s.readChar()
+			tok := token.NewToken(token.ELLIPSIS, "...", line, column)
+			s.readChar()
+			return tok
+		}
 		tok := token.NewToken(token.DOT, ".", line, column)
 		s.readChar()
 		return tok
@@ -361,29 +362,8 @@ func (s *Scanner) readNumber(line, column int) token.Token {
 	}
 
 	end := s.position
-	if isNegative {
-		end = s.position
-		lexeme := s.input[start:end]
-		if isFloat {
-			floatVal, err := strconv.ParseFloat(lexeme, 64)
-			if err != nil {
-				return s.newIllegalToken("недопустимый литерал с плавающей точкой", line, column)
-			}
-			return token.NewLiteralToken(token.FLOAT_LITERAL, lexeme, line, column,
-				&token.LiteralValue{FloatValue: floatVal})
-		}
-		intVal, err := strconv.ParseInt(lexeme, 10, 64)
-		if err != nil {
-			return s.newIllegalToken("целочисленный литерал вне диапазона [-2^31, 2^31-1]", line, column)
-		}
-		if intVal < -2147483648 || intVal > 2147483647 {
-			return s.newIllegalToken("целочисленный литерал вне диапазона [-2^31, 2^31-1]", line, column)
-		}
-		return token.NewLiteralToken(token.INT_LITERAL, lexeme, line, column,
-			&token.LiteralValue{IntValue: int32(intVal)})
-	}
-
 	lexeme := s.input[start:end]
+
 	if isFloat {
 		floatVal, err := strconv.ParseFloat(lexeme, 64)
 		if err != nil {
@@ -400,6 +380,11 @@ func (s *Scanner) readNumber(line, column int) token.Token {
 
 	if intVal < -2147483648 || intVal > 2147483647 {
 		return s.newIllegalToken("целочисленный литерал вне диапазона [-2^31, 2^31-1]", line, column)
+	}
+
+	if isNegative {
+		return token.NewLiteralToken(token.INT_LITERAL, lexeme, line, column,
+			&token.LiteralValue{IntValue: int32(intVal)})
 	}
 
 	return token.NewLiteralToken(token.INT_LITERAL, lexeme, line, column,
@@ -474,8 +459,8 @@ func (s *Scanner) skipSingleLineComment() {
 }
 
 func (s *Scanner) skipMultiLineComment() bool {
-	s.readChar() // пропускаем '*'
-	s.readChar() // пропускаем следующий символ
+	s.readChar()
+	s.readChar()
 
 	nesting := 1
 	for nesting > 0 && s.ch != 0 {
@@ -492,7 +477,6 @@ func (s *Scanner) skipMultiLineComment() bool {
 		}
 	}
 
-	// Возвращает true, если комментарий не был закрыт
 	return nesting > 0
 }
 

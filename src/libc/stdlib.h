@@ -1,0 +1,10 @@
+extern int printf(string fmt, ...);
+extern int scanf(string fmt, ...);
+extern int puts(string str);
+extern int getchar();
+extern void* malloc(int size);
+extern void free(void* ptr);
+extern void* memcpy(void* dest, void* src, int n);
+extern void* memset(void* ptr, int value, int n);
+extern void abort();
+extern void exit(int code);

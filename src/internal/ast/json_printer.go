@@ -69,6 +69,26 @@ func (p *JSONPrinter) convertDeclaration(decl DeclarationNode) interface{} {
 			Children: []interface{}{p.convertStatement(d.Body)},
 		}
 
+	case *ExternFuncDeclNode:
+		params := make([]interface{}, len(d.Parameters))
+		for i, param := range d.Parameters {
+			params[i] = map[string]interface{}{
+				"type": param.Type.String(),
+				"name": param.Name.Value,
+			}
+		}
+
+		return jsonNode{
+			Type:   "ExternFuncDecl",
+			Line:   d.Line(),
+			Column: d.Column(),
+			Name:   d.Name.Value,
+			Value: map[string]interface{}{
+				"returnType": d.ReturnType.String(),
+				"parameters": params,
+			},
+		}
+
 	case *StructDeclNode:
 		fields := make([]interface{}, len(d.Fields))
 		for i, field := range d.Fields {
@@ -112,8 +132,8 @@ func (p *JSONPrinter) convertStatement(stmt StatementNode) interface{} {
 	switch s := stmt.(type) {
 	case *BlockStmtNode:
 		children := make([]interface{}, len(s.Statements))
-		for i, stmt := range s.Statements {
-			children[i] = p.convertStatement(stmt)
+		for i, st := range s.Statements {
+			children[i] = p.convertStatement(st)
 		}
 		return jsonNode{
 			Type:     "BlockStmt",
@@ -284,6 +304,31 @@ func (p *JSONPrinter) convertExpression(expr ExpressionNode) interface{} {
 				map[string]interface{}{"left": p.convertExpression(e.Left)},
 				map[string]interface{}{"right": p.convertExpression(e.Right)},
 			},
+		}
+
+	case *IndexExprNode:
+		return jsonNode{
+			Type:    "IndexExpr",
+			Line:    e.Line(),
+			Column:  e.Column(),
+			TypeAnn: typeAnn,
+			Children: []interface{}{
+				map[string]interface{}{"array": p.convertExpression(e.Array)},
+				map[string]interface{}{"index": p.convertExpression(e.Index)},
+			},
+		}
+
+	case *ArrayLiteralExprNode:
+		children := make([]interface{}, len(e.Elements))
+		for i, elem := range e.Elements {
+			children[i] = p.convertExpression(elem)
+		}
+		return jsonNode{
+			Type:     "ArrayLiteralExpr",
+			Line:     e.Line(),
+			Column:   e.Column(),
+			Children: children,
+			TypeAnn:  typeAnn,
 		}
 	}
 	return nil

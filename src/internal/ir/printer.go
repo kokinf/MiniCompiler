@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// TextPrinter выводит IR в текстовом формате
 type TextPrinter struct {
 	showComments bool
 }
@@ -35,7 +36,9 @@ func (p *DOTPrinter) Print(program *Program) string {
 	sb.WriteString("  edge [arrowhead=vee];\n\n")
 
 	for _, fn := range program.Functions {
-		p.printFunction(&sb, fn)
+		if !fn.IsExtern {
+			p.printFunction(&sb, fn)
+		}
 	}
 
 	sb.WriteString("}\n")
@@ -43,17 +46,14 @@ func (p *DOTPrinter) Print(program *Program) string {
 }
 
 func (p *DOTPrinter) printFunction(sb *strings.Builder, fn *Function) {
-	// Кластер для функции
 	fmt.Fprintf(sb, "  subgraph cluster_%s {\n", fn.Name)
 	fmt.Fprintf(sb, "    label=\"%s\";\n", fn.Name)
 	fmt.Fprintf(sb, "    color=blue;\n\n")
 
-	// Узлы для базовых блоков
 	for _, block := range fn.Blocks {
 		p.printBlock(sb, block)
 	}
 
-	// Ребра между блоками
 	for _, block := range fn.Blocks {
 		for _, succ := range block.Successors {
 			fmt.Fprintf(sb, "    %s -> %s;\n", block.Label, succ.Label)
@@ -64,7 +64,6 @@ func (p *DOTPrinter) printFunction(sb *strings.Builder, fn *Function) {
 }
 
 func (p *DOTPrinter) printBlock(sb *strings.Builder, block *BasicBlock) {
-	// Формируем метку блока с инструкциями
 	label := block.Label + "\\n"
 	for _, inst := range block.Instructions {
 		label += strings.ReplaceAll(inst.String(), "\"", "\\\"") + "\\l"
@@ -88,8 +87,9 @@ type jsonProgram struct {
 type jsonFunction struct {
 	Name       string               `json:"name"`
 	ReturnType string               `json:"returnType"`
+	IsExtern   bool                 `json:"isExtern,omitempty"`
 	Params     []jsonParam          `json:"params"`
-	Blocks     []jsonBlock          `json:"blocks"`
+	Blocks     []jsonBlock          `json:"blocks,omitempty"`
 	Locals     map[string]jsonLocal `json:"locals,omitempty"`
 }
 
@@ -122,7 +122,6 @@ func (p *JSONPrinter) Print(program *Program) string {
 		Globals:   make(map[string]jsonGlobal),
 	}
 
-	// Глобальные переменные
 	for name, g := range program.Globals {
 		var init interface{}
 		if g.Init != nil {
@@ -134,11 +133,11 @@ func (p *JSONPrinter) Print(program *Program) string {
 		}
 	}
 
-	// Функции
 	for _, fn := range program.Functions {
 		jf := jsonFunction{
 			Name:       fn.Name,
 			ReturnType: fn.ReturnType,
+			IsExtern:   fn.IsExtern,
 			Params:     make([]jsonParam, 0),
 			Blocks:     make([]jsonBlock, 0),
 			Locals:     make(map[string]jsonLocal),
@@ -219,7 +218,6 @@ func CollectStats(program *Program) *Stats {
 			}
 		}
 
-		// Считаем Def-Use цепочки
 		s.DefUseChains += len(fn.GlobalDefs)
 	}
 

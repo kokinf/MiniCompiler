@@ -53,6 +53,7 @@ func main() {
 	compileInput := compileCmd.String("input", "", "Входной исходный файл")
 	compileOutput := compileCmd.String("output", "", "Выходной файл с ассемблером")
 	compileTarget := compileCmd.String("target", "x86_64", "Целевая архитектура: x86_64")
+	compileOptimize := compileCmd.Bool("optimize", false, "Включить оптимизации")
 
 	// Команда test
 	testCmd := flag.NewFlagSet("test", flag.ExitOnError)
@@ -81,7 +82,7 @@ func main() {
 		runIRGenerator(*irInput, *irOutput, *irFormat, *irOptimize, *irStats)
 	case "compile":
 		compileCmd.Parse(os.Args[2:])
-		runCompiler(*compileInput, *compileOutput, *compileTarget)
+		runCompiler(*compileInput, *compileOutput, *compileTarget, *compileOptimize)
 	case "test":
 		testCmd.Parse(os.Args[2:])
 		runTests(*testType)
@@ -101,57 +102,19 @@ func printUsage() {
 	fmt.Println("  check   --input <файл> [--output <файл>] [--verbose] [--show-types]")
 	fmt.Println("  symbols --input <файл> [--format text|json]")
 	fmt.Println("  ir      --input <файл> [--output <файл>] [--format text|dot|json] [--optimize] [--stats]")
-	fmt.Println("  compile --input <файл> [--output <файл>] [--target x86_64]")
+	fmt.Println("  compile --input <файл> [--output <файл>] [--target x86_64] [--optimize]")
+	fmt.Println("  test    --type <all|lexer|parser|semantic|ir|codegen>")
 }
 
-func runLexer(inputFile, outputFile string) {
+func readSourceFile(inputFile string) (string, []mytoken.Token) {
 	if inputFile == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
+		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл (--input)")
 		os.Exit(1)
 	}
 
 	content, err := os.ReadFile(inputFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
-		os.Exit(1)
-	}
-
-	scanner := lexer.NewScanner(string(content))
-	var output strings.Builder
-	hasErrors := false
-
-	for !scanner.IsAtEnd() {
-		tok := scanner.NextToken()
-		output.WriteString(tok.String() + "\n")
-		if tok.Type == mytoken.ILLEGAL {
-			hasErrors = true
-		}
-		if tok.Type == mytoken.EOF {
-			break
-		}
-	}
-
-	if outputFile != "" {
-		os.WriteFile(outputFile, []byte(output.String()), 0644)
-		fmt.Printf("Токены записаны в %s\n", outputFile)
-	} else {
-		fmt.Print(output.String())
-	}
-
-	if hasErrors {
-		os.Exit(1)
-	}
-}
-
-func runParser(inputFile, outputFile, format string, verbose bool) {
-	if inputFile == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
-		os.Exit(1)
-	}
-
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Ошибка чтения файла '%s': %v\n", inputFile, err)
 		os.Exit(1)
 	}
 
@@ -166,14 +129,24 @@ func runParser(inputFile, outputFile, format string, verbose bool) {
 		}
 	}
 
-	// Проверка лексических ошибок
+	return string(content), tokens
+}
+
+func checkLexErrors(tokens []mytoken.Token) bool {
+	hasErrors := false
 	for _, tok := range tokens {
 		if tok.Type == mytoken.ILLEGAL {
 			fmt.Fprintf(os.Stderr, "Лексическая ошибка: %s\n", tok.Lexeme)
-			os.Exit(1)
+			hasErrors = true
 		}
 	}
+	if hasErrors {
+		os.Exit(1)
+	}
+	return false
+}
 
+func parseSource(tokens []mytoken.Token) *ast.ProgramNode {
 	p := parser.NewParser(tokens)
 	program := p.Parse()
 
@@ -185,11 +158,35 @@ func runParser(inputFile, outputFile, format string, verbose bool) {
 		os.Exit(1)
 	}
 
-	// Проверка на nil program
 	if program == nil {
 		fmt.Fprintln(os.Stderr, "Ошибка: не удалось распарсить программу")
 		os.Exit(1)
 	}
+
+	return program
+}
+
+func runLexer(inputFile, outputFile string) {
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+
+	var output strings.Builder
+	for _, tok := range tokens {
+		output.WriteString(tok.String() + "\n")
+	}
+
+	if outputFile != "" {
+		os.WriteFile(outputFile, []byte(output.String()), 0644)
+		fmt.Printf("Токены записаны в %s\n", outputFile)
+	} else {
+		fmt.Print(output.String())
+	}
+}
+
+func runParser(inputFile, outputFile, format string, verbose bool) {
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+	program := parseSource(tokens)
 
 	var output string
 	switch format {
@@ -221,46 +218,9 @@ func runParser(inputFile, outputFile, format string, verbose bool) {
 }
 
 func runSemanticCheck(inputFile, outputFile string, verbose, showTypes bool) {
-	if inputFile == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
-		os.Exit(1)
-	}
-
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
-		os.Exit(1)
-	}
-
-	scanner := lexer.NewScanner(string(content))
-	var tokens []mytoken.Token
-
-	for !scanner.IsAtEnd() {
-		tok := scanner.NextToken()
-		tokens = append(tokens, tok)
-		if tok.Type == mytoken.EOF {
-			break
-		}
-	}
-
-	// Проверка лексических ошибок
-	for _, tok := range tokens {
-		if tok.Type == mytoken.ILLEGAL {
-			fmt.Fprintf(os.Stderr, "Лексическая ошибка: %s\n", tok.Lexeme)
-			os.Exit(1)
-		}
-	}
-
-	p := parser.NewParser(tokens)
-	program := p.Parse()
-
-	if len(p.Errors()) > 0 {
-		fmt.Fprintln(os.Stderr, "Ошибки парсинга:")
-		for _, err := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
-		}
-		os.Exit(1)
-	}
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+	program := parseSource(tokens)
 
 	analyzer := semantic.NewSemanticAnalyzer()
 	symbolTable, errors, decoratedAST := analyzer.Analyze(program)
@@ -268,36 +228,37 @@ func runSemanticCheck(inputFile, outputFile string, verbose, showTypes bool) {
 	var output strings.Builder
 
 	if verbose {
-		output.WriteString(" Семантический анализ \n\n")
+		output.WriteString("=== Семантический анализ ===\n\n")
 	}
 
 	output.WriteString(symbolTable.String())
 
 	if showTypes && decoratedAST != nil {
-		output.WriteString("\n Декорированный AST \n")
+		output.WriteString("\n=== Декорированный AST ===\n")
 		printer := ast.NewPrettyPrinter()
 		output.WriteString(printer.Print(decoratedAST))
 	}
 
 	if len(errors.Errors()) > 0 {
-		output.WriteString("\n Ошибки \n")
+		output.WriteString("\n=== Ошибки ===\n")
 		output.WriteString(errors.String())
 	}
 
-	// Validation Report
 	if verbose {
-		output.WriteString("\n Отчёт валидации \n")
+		output.WriteString("\n=== Отчёт валидации ===\n")
 		allErrors := errors.Errors()
 		output.WriteString(fmt.Sprintf("Ошибок: %d\n", len(allErrors)))
 
-		// Сбор символов по скоупам
 		globalScope := symbolTable.GetGlobalScope()
 		output.WriteString(fmt.Sprintf("\nГлобальных символов: %d\n", len(globalScope.GetAllSymbols())))
 		for _, sym := range globalScope.GetAllSymbols() {
-			output.WriteString(fmt.Sprintf("  %s: %s %s (line %d)\n", sym.Name, sym.Kind, sym.Type.String(), sym.Line))
+			externTag := ""
+			if sym.IsExtern {
+				externTag = " [extern]"
+			}
+			output.WriteString(fmt.Sprintf("  %s: %s %s (line %d)%s\n", sym.Name, sym.Kind, sym.Type.String(), sym.Line, externTag))
 		}
 
-		// Статистика типов
 		typeSystem := semantic.NewTypeSystem()
 		output.WriteString(fmt.Sprintf("\nРазмеры типов:\n"))
 		output.WriteString(fmt.Sprintf("  int: %d байт\n", typeSystem.GetSize(typeSystem.IntType)))
@@ -308,6 +269,7 @@ func runSemanticCheck(inputFile, outputFile string, verbose, showTypes bool) {
 
 	if outputFile != "" {
 		os.WriteFile(outputFile, []byte(output.String()), 0644)
+		fmt.Printf("Результаты записаны в %s\n", outputFile)
 	} else {
 		fmt.Print(output.String())
 	}
@@ -318,38 +280,9 @@ func runSemanticCheck(inputFile, outputFile string, verbose, showTypes bool) {
 }
 
 func runSymbolTable(inputFile, format string) {
-	if inputFile == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
-		os.Exit(1)
-	}
-
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
-		os.Exit(1)
-	}
-
-	scanner := lexer.NewScanner(string(content))
-	var tokens []mytoken.Token
-
-	for !scanner.IsAtEnd() {
-		tok := scanner.NextToken()
-		tokens = append(tokens, tok)
-		if tok.Type == mytoken.EOF {
-			break
-		}
-	}
-
-	p := parser.NewParser(tokens)
-	program := p.Parse()
-
-	if len(p.Errors()) > 0 {
-		fmt.Fprintln(os.Stderr, "Ошибки парсинга:")
-		for _, err := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
-		}
-		os.Exit(1)
-	}
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+	program := parseSource(tokens)
 
 	analyzer := semantic.NewSemanticAnalyzer()
 	symbolTable, _, _ := analyzer.Analyze(program)
@@ -357,7 +290,6 @@ func runSymbolTable(inputFile, format string) {
 	if format == "text" {
 		fmt.Print(symbolTable.String())
 	} else if format == "json" {
-		// JSON вывод таблицы символов
 		fmt.Println("{")
 		fmt.Println("  \"scopes\": [")
 		globalScope := symbolTable.GetGlobalScope()
@@ -367,8 +299,12 @@ func runSymbolTable(inputFile, format string) {
 			if i == len(symbols)-1 {
 				comma = ""
 			}
-			fmt.Printf("    {\"name\": \"%s\", \"kind\": \"%s\", \"type\": \"%s\", \"line\": %d}%s\n",
-				sym.Name, sym.Kind, sym.Type.String(), sym.Line, comma)
+			externFlag := "false"
+			if sym.IsExtern {
+				externFlag = "true"
+			}
+			fmt.Printf("    {\"name\": \"%s\", \"kind\": \"%s\", \"type\": \"%s\", \"line\": %d, \"extern\": %s}%s\n",
+				sym.Name, sym.Kind, sym.Type.String(), sym.Line, externFlag, comma)
 		}
 		fmt.Println("  ]")
 		fmt.Println("}")
@@ -376,50 +312,10 @@ func runSymbolTable(inputFile, format string) {
 }
 
 func runIRGenerator(inputFile, outputFile, format string, optimize, showStats bool) {
-	if inputFile == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
-		os.Exit(1)
-	}
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+	program := parseSource(tokens)
 
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Лексер
-	scanner := lexer.NewScanner(string(content))
-	var tokens []mytoken.Token
-
-	for !scanner.IsAtEnd() {
-		tok := scanner.NextToken()
-		tokens = append(tokens, tok)
-		if tok.Type == mytoken.EOF {
-			break
-		}
-	}
-
-	// Проверка лексических ошибок
-	for _, tok := range tokens {
-		if tok.Type == mytoken.ILLEGAL {
-			fmt.Fprintf(os.Stderr, "Лексическая ошибка: %s\n", tok.Lexeme)
-			os.Exit(1)
-		}
-	}
-
-	// Парсер
-	p := parser.NewParser(tokens)
-	program := p.Parse()
-
-	if len(p.Errors()) > 0 {
-		fmt.Fprintln(os.Stderr, "Ошибки парсинга:")
-		for _, err := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
-		}
-		os.Exit(1)
-	}
-
-	// Семантический анализ
 	analyzer := semantic.NewSemanticAnalyzer()
 	symbolTable, errors, _ := analyzer.Analyze(program)
 
@@ -429,12 +325,10 @@ func runIRGenerator(inputFile, outputFile, format string, optimize, showStats bo
 		os.Exit(1)
 	}
 
-	// Генерация IR
 	typeSystem := semantic.NewTypeSystem()
 	irGenerator := ir.NewIRGenerator(symbolTable, typeSystem)
 	irProgram := irGenerator.Generate(program)
 
-	// Оптимизация
 	if optimize {
 		optimizer := ir.NewPeepholeOptimizer(irProgram)
 		optimizer.Optimize()
@@ -442,14 +336,12 @@ func runIRGenerator(inputFile, outputFile, format string, optimize, showStats bo
 
 	var output strings.Builder
 
-	// Статистика
 	if showStats {
 		stats := ir.CollectStats(irProgram)
 		output.WriteString(stats.String())
 		output.WriteString("\n")
 	}
 
-	// Вывод в нужном формате
 	switch format {
 	case "text":
 		printer := ir.NewTextPrinter()
@@ -473,7 +365,7 @@ func runIRGenerator(inputFile, outputFile, format string, optimize, showStats bo
 	}
 }
 
-func runCompiler(inputFile, outputFile, target string) {
+func runCompiler(inputFile, outputFile, target string, optimize bool) {
 	if inputFile == "" {
 		fmt.Fprintln(os.Stderr, "Ошибка: необходимо указать входной файл")
 		os.Exit(1)
@@ -484,51 +376,9 @@ func runCompiler(inputFile, outputFile, target string) {
 		os.Exit(1)
 	}
 
-	content, err := os.ReadFile(inputFile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка чтения: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Лексер
-	scanner := lexer.NewScanner(string(content))
-	var tokens []mytoken.Token
-
-	for !scanner.IsAtEnd() {
-		tok := scanner.NextToken()
-		tokens = append(tokens, tok)
-		if tok.Type == mytoken.EOF {
-			break
-		}
-	}
-
-	hasLexErrors := false
-	for _, tok := range tokens {
-		if tok.Type == mytoken.ILLEGAL {
-			fmt.Fprintf(os.Stderr, "Лексическая ошибка: %s\n", tok.Lexeme)
-			hasLexErrors = true
-		}
-	}
-	if hasLexErrors {
-		os.Exit(1)
-	}
-
-	// Парсер
-	p := parser.NewParser(tokens)
-	program := p.Parse()
-
-	if len(p.Errors()) > 0 {
-		fmt.Fprintln(os.Stderr, "Ошибки парсинга:")
-		for _, err := range p.Errors() {
-			fmt.Fprintf(os.Stderr, "  %s\n", err)
-		}
-		os.Exit(1)
-	}
-
-	if program == nil {
-		fmt.Fprintln(os.Stderr, "Ошибка: не удалось распарсить программу")
-		os.Exit(1)
-	}
+	_, tokens := readSourceFile(inputFile)
+	checkLexErrors(tokens)
+	program := parseSource(tokens)
 
 	// Семантический анализ
 	analyzer := semantic.NewSemanticAnalyzer()
@@ -545,12 +395,21 @@ func runCompiler(inputFile, outputFile, target string) {
 	irGenerator := ir.NewIRGenerator(symbolTable, typeSystem)
 	irProgram := irGenerator.Generate(decoratedAST)
 
+	// Оптимизация IR
+	if optimize {
+		optimizer := ir.NewPeepholeOptimizer(irProgram)
+		optimizer.Optimize()
+		if outputFile == "" {
+			fmt.Fprintf(os.Stderr, "\n%s\n", optimizer.GetOptimizationReport())
+		}
+	}
+
 	// Генерация x86-64 ассемблера
 	codeGenerator := codegen.NewX86Generator(irProgram, symbolTable, typeSystem)
 	asmCode := codeGenerator.Generate()
 
 	if outputFile != "" {
-		err = os.WriteFile(outputFile, []byte(asmCode), 0644)
+		err := os.WriteFile(outputFile, []byte(asmCode), 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Ошибка записи: %v\n", err)
 			os.Exit(1)
@@ -560,15 +419,23 @@ func runCompiler(inputFile, outputFile, target string) {
 		fmt.Println("Для сборки исполняемого файла выполните:")
 		fmt.Println("  nasm -f elf64 -o runtime.o src/runtime/runtime.asm")
 		fmt.Printf("  nasm -f elf64 -o program.o %s\n", outputFile)
-		fmt.Println("  ld -o program runtime.o program.o")
+		fmt.Println("  gcc -no-pie -o program runtime.o program.o")
+		fmt.Println()
+		fmt.Println("Примечание: используется gcc для линковки с libc (malloc, free, printf, abort)")
 	} else {
 		fmt.Print(asmCode)
 	}
 }
 
 func runTests(testType string) {
-	fmt.Printf(" Запуск тестов: %s \n\n", testType)
+	fmt.Printf("=== Запуск тестов: %s ===\n\n", testType)
 
-	fmt.Println("Для запуска тестов используйте: make test")
-	fmt.Println("Или запустите скрипт: tests/test_runner/run_tests.sh")
+	switch testType {
+	case "all", "lexer", "parser", "semantic", "ir", "codegen", "control-flow":
+		fmt.Println("Для запуска тестов используйте: make test")
+		fmt.Println("Или запустите скрипт: tests/test_runner/run_tests.sh")
+	default:
+		fmt.Printf("Неизвестный тип тестов: %s\n", testType)
+		fmt.Println("Доступные типы: all, lexer, parser, semantic, ir, codegen, control-flow")
+	}
 }

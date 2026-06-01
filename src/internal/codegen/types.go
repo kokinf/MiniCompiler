@@ -4,7 +4,7 @@ import (
 	"mikrocompiler/src/internal/semantic"
 )
 
-// Register представляет x86-64
+// Register представляет x86-64 регистр
 type Register string
 
 const (
@@ -171,6 +171,11 @@ func GetTypeInfo(t *semantic.Type) *TypeInfo {
 		info.OperandSize = SizeByte
 	case semantic.TypeString:
 		info.Size = 16
+		info.Align = 8
+		info.IsFloat = false
+		info.OperandSize = SizeQword
+	case semantic.TypeArray, semantic.TypePointer:
+		info.Size = 8
 		info.Align = 8
 		info.IsFloat = false
 		info.OperandSize = SizeQword

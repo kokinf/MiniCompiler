@@ -28,44 +28,50 @@ const (
 	KW_STRUCT TokenType = "KW_STRUCT"
 	KW_FN     TokenType = "KW_FN"
 
+	// Sprint 7
+	KW_EXTERN TokenType = "KW_EXTERN"
+
 	IDENTIFIER     TokenType = "IDENTIFIER"
 	INT_LITERAL    TokenType = "INT_LITERAL"
 	FLOAT_LITERAL  TokenType = "FLOAT_LITERAL"
 	STRING_LITERAL TokenType = "STRING_LITERAL"
 
-	ASSIGN   TokenType = "ASSIGN"   // =
-	PLUS     TokenType = "PLUS"     // +
-	MINUS    TokenType = "MINUS"    // -
-	MULTIPLY TokenType = "MULTIPLY" // *
-	DIVIDE   TokenType = "DIVIDE"   // /
-	MODULO   TokenType = "MODULO"   // %
+	ASSIGN   TokenType = "ASSIGN"
+	PLUS     TokenType = "PLUS"
+	MINUS    TokenType = "MINUS"
+	MULTIPLY TokenType = "MULTIPLY"
+	DIVIDE   TokenType = "DIVIDE"
+	MODULO   TokenType = "MODULO"
 
-	PLUS_ASSIGN     TokenType = "PLUS_ASSIGN"     // +=
-	MINUS_ASSIGN    TokenType = "MINUS_ASSIGN"    // -=
-	MULTIPLY_ASSIGN TokenType = "MULTIPLY_ASSIGN" // *=
-	DIVIDE_ASSIGN   TokenType = "DIVIDE_ASSIGN"   // /=
+	PLUS_ASSIGN     TokenType = "PLUS_ASSIGN"
+	MINUS_ASSIGN    TokenType = "MINUS_ASSIGN"
+	MULTIPLY_ASSIGN TokenType = "MULTIPLY_ASSIGN"
+	DIVIDE_ASSIGN   TokenType = "DIVIDE_ASSIGN"
 
-	EQ     TokenType = "EQ"     // ==
-	NOT_EQ TokenType = "NOT_EQ" // !=
-	NOT    TokenType = "NOT"    // !
-	LT     TokenType = "LT"     // <
-	LT_EQ  TokenType = "LT_EQ"  // <=
-	GT     TokenType = "GT"     // >
-	GT_EQ  TokenType = "GT_EQ"  // >=
+	EQ     TokenType = "EQ"
+	NOT_EQ TokenType = "NOT_EQ"
+	NOT    TokenType = "NOT"
+	LT     TokenType = "LT"
+	LT_EQ  TokenType = "LT_EQ"
+	GT     TokenType = "GT"
+	GT_EQ  TokenType = "GT_EQ"
 
-	AND TokenType = "AND" // &&
-	OR  TokenType = "OR"  // ||
+	AND TokenType = "AND"
+	OR  TokenType = "OR"
 
-	LPAREN    TokenType = "LPAREN"    // (
-	RPAREN    TokenType = "RPAREN"    // )
-	LBRACE    TokenType = "LBRACE"    // {
-	RBRACE    TokenType = "RBRACE"    // }
-	LBRACKET  TokenType = "LBRACKET"  // [
-	RBRACKET  TokenType = "RBRACKET"  // ]
-	SEMICOLON TokenType = "SEMICOLON" // ;
-	COMMA     TokenType = "COMMA"     // ,
-	DOT       TokenType = "DOT"       // .
-	ARROW     TokenType = "ARROW"     // ->
+	LPAREN    TokenType = "LPAREN"
+	RPAREN    TokenType = "RPAREN"
+	LBRACE    TokenType = "LBRACE"
+	RBRACE    TokenType = "RBRACE"
+	LBRACKET  TokenType = "LBRACKET"
+	RBRACKET  TokenType = "RBRACKET"
+	SEMICOLON TokenType = "SEMICOLON"
+	COMMA     TokenType = "COMMA"
+	DOT       TokenType = "DOT"
+	ARROW     TokenType = "ARROW"
+
+	// Sprint 7
+	ELLIPSIS TokenType = "ELLIPSIS"
 )
 
 type LiteralValue struct {
@@ -115,7 +121,7 @@ func (t Token) String() string {
 			if t.Literal.StringValue == "" {
 				return fmt.Sprintf("%d:%d %s \"%s\"", t.Line, t.Column, t.Type, escapedLexeme)
 			}
-			return fmt.Sprintf("%d:%d %s \"%s\" %s", t.Line, t.Column, t.Type, escapedLexeme, t.Literal.StringValue)
+			return fmt.Sprintf("%d:%d %s \"%s\" \"%s\"", t.Line, t.Column, t.Type, escapedLexeme, t.Literal.StringValue)
 		case KW_TRUE, KW_FALSE:
 			return fmt.Sprintf("%d:%d %s \"%s\" %t", t.Line, t.Column, t.Type, t.Lexeme, t.Literal.BoolValue)
 		}
@@ -138,6 +144,7 @@ var Keywords = map[string]TokenType{
 	"void":   KW_VOID,
 	"struct": KW_STRUCT,
 	"fn":     KW_FN,
+	"extern": KW_EXTERN, // Sprint 7
 }
 
 func LookupIdentifier(ident string) TokenType {
