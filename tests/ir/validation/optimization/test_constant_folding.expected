@@ -9,12 +9,10 @@ Phi Nodes:       0
 Def-Use Chains:  13
 
 Instruction breakdown:
-  ALLOCA      : 4
-  MOVE        : 3
   STORE       : 4
-  LOAD        : 4
-  ADD         : 2
   RETURN      : 1
+  ALLOCA      : 4
+  MOVE        : 9
 
 function main: int ()
   ; Locals:
@@ -25,20 +23,20 @@ function main: int ()
 
 entry:
   %t1 = ALLOCA 4  ; var a: int
-  %t2 = MOVE 30
-  STORE [%t1], %t2
+  %t2 = MOVE 30  ; folded add
+  STORE [%t1], 30
   %t3 = ALLOCA 4  ; var b: int
-  %t4 = MOVE 20
-  STORE [%t3], %t4
+  %t4 = MOVE 20  ; folded mul
+  STORE [%t3], 20
   %t5 = ALLOCA 4  ; var c: int
-  %t6 = MOVE 20
-  STORE [%t5], %t6
+  %t6 = MOVE 20  ; folded div
+  STORE [%t5], 20
   %t7 = ALLOCA 4  ; var d: int
-  %t8 = LOAD [%t1]
-  %t9 = LOAD [%t3]
-  %t10 = ADD %t8, %t9
-  %t11 = LOAD [%t5]
-  %t12 = ADD %t10, %t11
-  STORE [%t7], %t12
-  %t13 = LOAD [%t7]
-  RETURN %t13
+  %t8 = MOVE 30  ; propagated constant
+  %t9 = MOVE 20  ; propagated constant
+  %t10 = MOVE 50  ; folded add
+  %t11 = MOVE 20  ; propagated constant
+  %t12 = MOVE 70  ; folded add
+  STORE [%t7], 70
+  %t13 = MOVE 70  ; propagated constant
+  RETURN 70

@@ -3,21 +3,16 @@ function abs: int (int x)
   ;   x: int (offset 8, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param x: int
-  STORE [%t1], x
-  %t2 = LOAD [%t1]
-  %t3 = CMP_LT %t2, 0
-  JUMP_IF %t3, if_then_1
+  %t1 = CMP_LT x, 0
+  JUMP_IF %t1, if_then_1
   JUMP if_merge_2
 
 if_then_1:
-  %t4 = LOAD [%t1]
-  %t5 = NEG %t4
-  RETURN %t5
+  %t2 = NEG x
+  RETURN %t2
 
 if_merge_2:
-  %t6 = LOAD [%t1]
-  RETURN %t6
+  RETURN x
 
 function main: int ()
 

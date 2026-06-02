@@ -2,44 +2,110 @@ package semantic
 
 import (
 	"fmt"
+	"mikrocompiler/src/internal/utils"
+	"strings"
 )
 
 type ErrorCode string
 
 const (
-	ErrUndeclaredIdentifier ErrorCode = "undeclared_identifier"
-	ErrDuplicateDeclaration ErrorCode = "duplicate_declaration"
-	ErrTypeMismatch         ErrorCode = "type_mismatch"
-	ErrArgumentCount        ErrorCode = "argument_count_mismatch"
-	ErrArgumentType         ErrorCode = "argument_type_mismatch"
-	ErrInvalidReturn        ErrorCode = "invalid_return"
-	ErrInvalidCondition     ErrorCode = "invalid_condition"
-	ErrUseBeforeDeclaration ErrorCode = "use_before_declaration"
-	ErrInvalidAssignment    ErrorCode = "invalid_assignment"
-	ErrInvalidUnaryOp       ErrorCode = "invalid_unary_operator"
-	ErrInvalidBinaryOp      ErrorCode = "invalid_binary_operator"
-	ErrFunctionNotFound     ErrorCode = "function_not_found"
-	ErrStructNotFound       ErrorCode = "struct_not_found"
-	ErrFieldNotFound        ErrorCode = "field_not_found"
-	ErrInvalidArraySize     ErrorCode = "invalid_array_size"          // Sprint 7
-	ErrInvalidArrayIndex    ErrorCode = "invalid_array_index"         // Sprint 7
-	ErrExternMismatch       ErrorCode = "extern_declaration_mismatch" // Sprint 7
+	ErrUndeclaredIdentifier ErrorCode = "E001"
+	ErrDuplicateDeclaration ErrorCode = "E002"
+	ErrTypeMismatch         ErrorCode = "E003"
+	ErrArgumentCount        ErrorCode = "E004"
+	ErrArgumentType         ErrorCode = "E005"
+	ErrInvalidReturn        ErrorCode = "E006"
+	ErrInvalidCondition     ErrorCode = "E007"
+	ErrUseBeforeDeclaration ErrorCode = "E008"
+	ErrInvalidAssignment    ErrorCode = "E009"
+	ErrInvalidUnaryOp       ErrorCode = "E010"
+	ErrInvalidBinaryOp      ErrorCode = "E011"
+	ErrFunctionNotFound     ErrorCode = "E012"
+	ErrStructNotFound       ErrorCode = "E013"
+	ErrFieldNotFound        ErrorCode = "E014"
+	ErrInvalidArraySize     ErrorCode = "E015"
+	ErrInvalidArrayIndex    ErrorCode = "E016"
+	ErrExternMismatch       ErrorCode = "E017"
 )
 
+var ErrorMessages = map[ErrorCode]string{
+	ErrUndeclaredIdentifier: "необъявленная переменная",
+	ErrDuplicateDeclaration: "повторное объявление",
+	ErrTypeMismatch:         "несовместимые типы",
+	ErrArgumentCount:        "неверное количество аргументов",
+	ErrArgumentType:         "неверный тип аргумента",
+	ErrInvalidReturn:        "неверное возвращаемое значение",
+	ErrInvalidCondition:     "условие должно быть типа bool",
+	ErrUseBeforeDeclaration: "использование до объявления",
+	ErrInvalidAssignment:    "недопустимое присваивание",
+	ErrInvalidUnaryOp:       "недопустимая унарная операция",
+	ErrInvalidBinaryOp:      "недопустимая бинарная операция",
+	ErrFunctionNotFound:     "функция не найдена",
+	ErrStructNotFound:       "структура не найдена",
+	ErrFieldNotFound:        "поле не найдено",
+	ErrInvalidArraySize:     "неверный размер массива",
+	ErrInvalidArrayIndex:    "неверный индекс массива",
+	ErrExternMismatch:       "несоответствие extern объявления",
+}
+
 type SemanticError struct {
-	Code    ErrorCode
-	Message string
-	Line    int
-	Column  int
-	Context string
+	Code     ErrorCode
+	Message  string
+	Line     int
+	Column   int
+	Context  string
+	Filename string
+	Source   string // исходная строка для отображения
 }
 
 func (e *SemanticError) Error() string {
-	if e.Context != "" {
-		return fmt.Sprintf("%s: %s\n  --> line %d, column %d\n  |\n  = in %s\n  = %s",
-			e.Code, e.Message, e.Line, e.Column, e.Context, e.Message)
+	var sb strings.Builder
+
+	// Формат: filename:line:column: error: CODE: message
+	if e.Filename != "" {
+		fmt.Fprintf(&sb, "%s:%d:%d: ", utils.BoldText(e.Filename), e.Line, e.Column)
+	} else {
+		fmt.Fprintf(&sb, "%s:%d: ", utils.BoldText(fmt.Sprintf("строка %d", e.Line)), e.Column)
 	}
-	return fmt.Sprintf("%s: %s\n  --> line %d, column %d", e.Code, e.Message, e.Line, e.Column)
+
+	msg, ok := ErrorMessages[e.Code]
+	if !ok {
+		msg = "неизвестная ошибка"
+	}
+
+	fmt.Fprintf(&sb, "%s: %s: %s\n", utils.RedText("ошибка"), utils.YellowText(string(e.Code)), msg)
+
+	if e.Context != "" {
+		fmt.Fprintf(&sb, "  %s %s\n", utils.CyanText("-->"), e.Context)
+	}
+
+	if e.Source != "" {
+		fmt.Fprintf(&sb, "   |\n")
+		fmt.Fprintf(&sb, " %s | %s\n", utils.GrayText(fmt.Sprintf("%d", e.Line)), e.Source)
+		fmt.Fprintf(&sb, "   | %s\n", utils.GreenText(strings.Repeat(" ", e.Column-1)+"^"))
+	}
+
+	fmt.Fprintf(&sb, "   | %s\n", utils.GrayText(e.Message))
+
+	return sb.String()
+}
+
+func (ec *ErrorCollector) String() string {
+	if len(ec.errors) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("\n%s: %d\n", utils.RedText("Ошибок"), len(ec.errors)))
+	sb.WriteString(strings.Repeat("─", 60) + "\n\n")
+
+	for i, err := range ec.errors {
+		sb.WriteString(fmt.Sprintf("%s %d:\n", utils.BoldText("Ошибка"), i+1))
+		sb.WriteString(err.Error())
+		sb.WriteString("\n")
+	}
+
+	return sb.String()
 }
 
 type ErrorCollector struct {
@@ -72,12 +138,4 @@ func (ec *ErrorCollector) HasErrors() bool {
 
 func (ec *ErrorCollector) Errors() []*SemanticError {
 	return ec.errors
-}
-
-func (ec *ErrorCollector) String() string {
-	result := ""
-	for _, err := range ec.errors {
-		result += err.Error() + "\n\n"
-	}
-	return result
 }

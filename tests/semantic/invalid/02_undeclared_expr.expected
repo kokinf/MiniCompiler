@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
- Ошибки 
+=== Ошибки ===
 undeclared_identifier: identifier 'unknown' not declared
   --> line 3, column 16
   |

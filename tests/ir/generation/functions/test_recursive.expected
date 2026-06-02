@@ -3,24 +3,19 @@ function factorial: int (int n)
   ;   n: int (offset 8, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param n: int
-  STORE [%t1], n
-  %t2 = LOAD [%t1]
-  %t3 = CMP_LE %t2, 1
-  JUMP_IF %t3, if_then_1
+  %t1 = CMP_LE n, 1
+  JUMP_IF %t1, if_then_1
   JUMP if_merge_2
 
 if_then_1:
   RETURN 1
 
 if_merge_2:
-  %t4 = LOAD [%t1]
-  %t5 = LOAD [%t1]
-  %t6 = SUB %t5, 1
-  PARAM 0, %t6
-  %t7 = CALL factorial(%t6)
-  %t8 = MUL %t4, %t7
-  RETURN %t8
+  %t2 = SUB n, 1
+  PARAM 0, %t2
+  %t3 = CALL factorial(%t2)
+  %t4 = MUL n, %t3
+  RETURN %t4
 
 function main: int ()
 

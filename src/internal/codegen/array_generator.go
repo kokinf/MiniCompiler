@@ -1,4 +1,3 @@
-// src/internal/codegen/array_generator.go
 package codegen
 
 import (

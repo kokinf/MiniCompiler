@@ -9,12 +9,10 @@ Phi Nodes:       0
 Def-Use Chains:  21
 
 Instruction breakdown:
-  LOAD        : 8
-  MOVE        : 5
-  ADD         : 2
-  RETURN      : 1
   ALLOCA      : 6
   STORE       : 6
+  MOVE        : 15
+  RETURN      : 1
 
 function main: int ()
   ; Locals:
@@ -29,28 +27,28 @@ entry:
   %t1 = ALLOCA 4  ; var x: int
   STORE [%t1], 10
   %t2 = ALLOCA 4  ; var a: int
-  %t3 = LOAD [%t1]
-  %t4 = MOVE %t3
-  STORE [%t2], %t4
+  %t3 = MOVE 10  ; propagated constant
+  %t4 = MOVE 10  ; x+0→x
+  STORE [%t2], 10
   %t5 = ALLOCA 4  ; var b: int
-  %t6 = LOAD [%t1]
-  %t7 = MOVE %t6
-  STORE [%t5], %t7
+  %t6 = MOVE 10  ; propagated constant
+  %t7 = MOVE 10  ; x*1→x
+  STORE [%t5], 10
   %t8 = ALLOCA 4  ; var c: int
-  %t9 = LOAD [%t1]
-  %t10 = MOVE %t9
-  STORE [%t8], %t10
+  %t9 = MOVE 10  ; propagated constant
+  %t10 = MOVE 10  ; x-0→x
+  STORE [%t8], 10
   %t11 = ALLOCA 4  ; var d: int
-  %t12 = LOAD [%t1]
-  %t13 = MOVE 0
-  STORE [%t11], %t13
+  %t12 = MOVE 10  ; propagated constant
+  %t13 = MOVE 0  ; x*0→0
+  STORE [%t11], 0
   %t14 = ALLOCA 4  ; var e: int
-  %t15 = LOAD [%t1]
-  %t16 = MOVE %t15
-  STORE [%t14], %t16
-  %t17 = LOAD [%t2]
-  %t18 = LOAD [%t5]
-  %t19 = ADD %t17, %t18
-  %t20 = LOAD [%t8]
-  %t21 = ADD %t19, %t20
-  RETURN %t21
+  %t15 = MOVE 10  ; propagated constant
+  %t16 = MOVE 10  ; 0+x→x
+  STORE [%t14], 10
+  %t17 = MOVE 10  ; propagated constant
+  %t18 = MOVE 10  ; propagated constant
+  %t19 = MOVE 20  ; folded add
+  %t20 = MOVE 10  ; propagated constant
+  %t21 = MOVE 30  ; folded add
+  RETURN 30

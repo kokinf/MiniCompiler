@@ -73,15 +73,20 @@ func NewStackFrame() *StackFrame {
 }
 
 func (sf *StackFrame) AllocateVar(name string, size int) *VarLocation {
+	// Выравнивание на размер переменной (но не более 8 байт)
 	align := size
 	if align > 8 {
 		align = 8
 	}
-	if sf.CurrentOffset%align != 0 {
-		sf.CurrentOffset += align - (sf.CurrentOffset % align)
+
+	// Выравниваем текущий offset
+	remainder := sf.CurrentOffset % align
+	if remainder != 0 {
+		sf.CurrentOffset += align - remainder
 	}
 
 	sf.CurrentOffset += size
+
 	loc := &VarLocation{
 		IsRegister:  false,
 		StackOffset: -sf.CurrentOffset,
@@ -98,6 +103,7 @@ func (sf *StackFrame) AllocateVar(name string, size int) *VarLocation {
 
 func (sf *StackFrame) GetStackSize() int {
 	size := sf.MaxOffset
+	// Выравниваем размер стека на 16 байт (требование ABI)
 	if size%16 != 0 {
 		size += 16 - (size % 16)
 	}

@@ -1,4 +1,3 @@
-// src/internal/codegen/expression_generator.go
 package codegen
 
 import (

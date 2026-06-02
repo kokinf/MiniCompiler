@@ -1,0 +1,2 @@
+int sum_arr(int arr[], int sz) { int s = 0; for (int i = 0; i < sz; i = i + 1) { s = s + arr[i]; } return s; }
+int main() { int a[5] = {1,2,3,4,5}; return sum_arr(a, 5); }

@@ -1,4 +1,3 @@
-// src/internal/codegen/x86_generator.go
 package codegen
 
 import (
@@ -31,6 +30,7 @@ type X86Generator struct {
 	tempToAddr     map[string]string
 	varToAddr      map[string]string
 	pendingParams  []*ir.Instruction
+	errors         []string
 }
 
 func NewX86Generator(program *ir.Program, symbolTable *semantic.SymbolTable, typeSystem *semantic.TypeSystem) *X86Generator {
@@ -46,6 +46,7 @@ func NewX86Generator(program *ir.Program, symbolTable *semantic.SymbolTable, typ
 		tempToAddrSize: make(map[string]int),
 		varToAddr:      make(map[string]string),
 		stdlibParser:   stdlibParser,
+		errors:         make([]string, 0),
 	}
 
 	gen.labelManager = NewLabelManager()
@@ -58,15 +59,28 @@ func NewX86Generator(program *ir.Program, symbolTable *semantic.SymbolTable, typ
 	return gen
 }
 
+func (g *X86Generator) addError(msg string) {
+	g.errors = append(g.errors, msg)
+}
+
+func (g *X86Generator) HasErrors() bool {
+	return len(g.errors) > 0
+}
+
+func (g *X86Generator) GetErrors() []string {
+	return g.errors
+}
+
 func (g *X86Generator) Generate() string {
 	g.output.Reset()
 	g.labelManager.Reset()
 	g.stringCounter = 0
+	g.errors = nil
 
 	g.emit("; ═══════════════════════════════════════════")
 	g.emit("; MiniCompiler x86-64 Code Generator")
 	g.emit("; System V AMD64 ABI")
-	g.emit("; Sprint 7: Arrays, Extern, Optimizations")
+	g.emit("; Sprint 8: Final Release")
 	g.emit("; ═══════════════════════════════════════════")
 	g.emit("")
 
@@ -89,6 +103,11 @@ func (g *X86Generator) Generate() string {
 	}
 
 	g.generateStart()
+
+	if len(g.errors) > 0 {
+		return ""
+	}
+
 	return g.output.String()
 }
 
@@ -138,68 +157,131 @@ func (g *X86Generator) generateFunction(fn *ir.Function) {
 }
 
 func (g *X86Generator) collectAllocations(fn *ir.Function) {
-	// ALLOCA
+	// Структура для хранения информации о переменной
+	type VarInfo struct {
+		name    string
+		size    int
+		isLocal bool // true для varToAddr, false для tempToAddr
+	}
+
+	// Собираем ВСЕ переменные в правильном порядке
+	var vars8 []VarInfo // 8-байтовые
+	var vars4 []VarInfo // 4-байтовые
+
+	// Собираем ALLOCA
 	for _, block := range fn.Blocks {
 		for _, inst := range block.Instructions {
 			if inst.Opcode == ir.OpAlloca && inst.Dest != nil {
 				name := inst.Dest.Name
-				if _, exists := g.tempToAddr[name]; !exists {
-					size := 4
-					if inst.Src1 != nil {
-						if s, ok := inst.Src1.GetIntValue(); ok && s > 0 {
-							size = s
-						}
+				if _, exists := g.tempToAddr[name]; exists {
+					continue
+				}
+				size := 4
+				if inst.Src1 != nil {
+					if s, ok := inst.Src1.GetIntValue(); ok && s > 0 {
+						size = s
 					}
-					loc := g.stackFrame.AllocateVar(name, size)
-					g.tempToAddr[name] = fmt.Sprintf("rbp - %d", -loc.StackOffset)
-					g.tempToAddrSize[name] = size
 				}
-			}
-			// malloc возвращает 8 байт
-			if inst.Opcode == ir.OpCall && inst.Dest != nil && inst.Src1 != nil && inst.Src1.Name == "malloc" {
-				if _, exists := g.tempToAddr[inst.Dest.Name]; !exists {
-					loc := g.stackFrame.AllocateVar(inst.Dest.Name, 8)
-					g.tempToAddr[inst.Dest.Name] = fmt.Sprintf("rbp - %d", -loc.StackOffset)
+				if size == 8 {
+					vars8 = append(vars8, VarInfo{name, 8, false})
+				} else {
+					vars4 = append(vars4, VarInfo{name, size, false})
 				}
-				g.tempToAddrSize[inst.Dest.Name] = 8
-			}
-			// GEP возвращает 8 байт
-			if inst.Opcode == ir.OpGep && inst.Dest != nil {
-				if _, exists := g.tempToAddr[inst.Dest.Name]; !exists {
-					loc := g.stackFrame.AllocateVar(inst.Dest.Name, 8)
-					g.tempToAddr[inst.Dest.Name] = fmt.Sprintf("rbp - %d", -loc.StackOffset)
-				}
-				g.tempToAddrSize[inst.Dest.Name] = 8
 			}
 		}
 	}
 
-	// Locals
-	for varName := range fn.Locals {
-		if _, exists := g.varToAddr[varName]; !exists {
-			varInfo := fn.Locals[varName]
-			size := varInfo.Size
-			if size == 0 {
-				size = 4
-			}
-			loc := g.stackFrame.AllocateVar(varName, size)
-			g.varToAddr[varName] = fmt.Sprintf("rbp - %d", -loc.StackOffset)
-		}
-	}
-
-	// Остальные temp
+	// Собираем результаты malloc (8 байт)
 	for _, block := range fn.Blocks {
 		for _, inst := range block.Instructions {
-			if inst.Dest != nil && inst.Opcode != ir.OpAlloca {
+			if inst.Opcode == ir.OpCall && inst.Dest != nil && inst.Src1 != nil && inst.Src1.Name == "malloc" {
+				name := inst.Dest.Name
+				if _, exists := g.tempToAddr[name]; !exists {
+					vars8 = append(vars8, VarInfo{name, 8, false})
+				}
+			}
+		}
+	}
+
+	// Собираем результаты GEP (8 байт)
+	for _, block := range fn.Blocks {
+		for _, inst := range block.Instructions {
+			if inst.Opcode == ir.OpGep && inst.Dest != nil {
+				name := inst.Dest.Name
+				if _, exists := g.tempToAddr[name]; !exists {
+					vars8 = append(vars8, VarInfo{name, 8, false})
+				}
+			}
+		}
+	}
+
+	// Собираем Locals
+	for varName, varInfo := range fn.Locals {
+		if _, exists := g.varToAddr[varName]; exists {
+			continue
+		}
+		size := varInfo.Size
+		if size == 0 {
+			size = 4
+		}
+		if size == 8 {
+			vars8 = append(vars8, VarInfo{varName, 8, true})
+		} else {
+			vars4 = append(vars4, VarInfo{varName, size, true})
+		}
+	}
+
+	// Собираем остальные временные переменные (4 байта)
+	for _, block := range fn.Blocks {
+		for _, inst := range block.Instructions {
+			if inst.Dest != nil && inst.Opcode != ir.OpAlloca && inst.Opcode != ir.OpGep {
 				name := inst.Dest.Name
 				if _, exists := g.tempToAddr[name]; !exists {
 					if _, exists := g.varToAddr[name]; !exists {
-						loc := g.stackFrame.AllocateVar(name, 4)
-						g.tempToAddr[name] = fmt.Sprintf("rbp - %d", -loc.StackOffset)
+						// Проверяем, не 8-байтовая ли это переменная
+						is8byte := false
+						for _, v := range vars8 {
+							if v.name == name {
+								is8byte = true
+								break
+							}
+						}
+						if !is8byte {
+							vars4 = append(vars4, VarInfo{name, 4, false})
+						}
 					}
 				}
 			}
 		}
+	}
+
+	// Выделяем 8-байтовые переменные
+	for _, v := range vars8 {
+		loc := g.stackFrame.AllocateVar(v.name, v.size)
+		addr := fmt.Sprintf("rbp - %d", -loc.StackOffset)
+		if v.isLocal {
+			g.varToAddr[v.name] = addr
+		} else {
+			g.tempToAddr[v.name] = addr
+		}
+		g.tempToAddrSize[v.name] = v.size
+	}
+
+	// Выделяем 4-байтовые переменные
+	for _, v := range vars4 {
+		loc := g.stackFrame.AllocateVar(v.name, v.size)
+		addr := fmt.Sprintf("rbp - %d", -loc.StackOffset)
+		if v.isLocal {
+			g.varToAddr[v.name] = addr
+		} else {
+			g.tempToAddr[v.name] = addr
+		}
+		g.tempToAddrSize[v.name] = v.size
+	}
+
+	// Padding если нет вызовов функций
+	if g.stackFrame.MaxOffset == 0 && g.hasFunctionCalls(fn) {
+		g.stackFrame.AllocateVar("_padding", 8)
 	}
 }
 
@@ -276,10 +358,6 @@ func (g *X86Generator) isExternCall(funcName string) bool {
 }
 
 func (g *X86Generator) setupParameters(fn *ir.Function) {
-	if len(fn.Params) == 0 {
-		return
-	}
-
 	for i, param := range fn.Params {
 		if reg, ok := g.abi.GetIntParamReg(i); ok {
 			addr := g.getOperandAddr(&ir.Operand{Type: ir.OperandVar, Name: param.Name})

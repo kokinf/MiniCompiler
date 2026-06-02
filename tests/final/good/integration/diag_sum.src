@@ -1,0 +1,1 @@
+int main() { int m[9]; for(int i=0;i<9;i=i+1){m[i]=i+1;} return m[0]+m[4]+m[8]; }

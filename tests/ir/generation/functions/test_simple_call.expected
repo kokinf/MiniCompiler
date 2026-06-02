@@ -4,14 +4,8 @@ function add: int (int a, int b)
   ;   b: int (offset 16, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param a: int
-  STORE [%t1], a
-  %t2 = ALLOCA 4  ; param b: int
-  STORE [%t2], b
-  %t3 = LOAD [%t1]
-  %t4 = LOAD [%t2]
-  %t5 = ADD %t3, %t4
-  RETURN %t5
+  %t1 = ADD a, b
+  RETURN %t1
 
 function main: int ()
   ; Locals:

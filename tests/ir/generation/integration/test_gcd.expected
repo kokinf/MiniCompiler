@@ -5,34 +5,25 @@ function gcd: int (int a, int b)
   ;   temp: int (offset 16, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param a: int
-  STORE [%t1], a
-  %t2 = ALLOCA 4  ; param b: int
-  STORE [%t2], b
   JUMP while_header_1
 
 while_header_1:
   ; preds: entry, while_body_2
-  %t3 = LOAD [%t2]
-  %t4 = CMP_NE %t3, 0
-  JUMP_IF %t4, while_body_2
+  %t1 = CMP_NE b, 0
+  JUMP_IF %t1, while_body_2
   JUMP while_exit_3
 
 while_body_2:
-  %t5 = ALLOCA 4  ; var temp: int
-  %t6 = LOAD [%t2]
-  STORE [%t5], %t6
-  %t7 = LOAD [%t1]
-  %t8 = LOAD [%t2]
-  %t9 = MOD %t7, %t8
-  STORE [%t2], %t9
-  %t10 = LOAD [%t5]
-  STORE [%t1], %t10
+  %t2 = ALLOCA 4  ; var temp: int
+  STORE [%t2], b
+  %t3 = MOD a, b
+  STORE [b], %t3
+  %t4 = LOAD [%t2]
+  STORE [a], %t4
   JUMP while_header_1
 
 while_exit_3:
-  %t11 = LOAD [%t1]
-  RETURN %t11
+  RETURN a
 
 function main: int ()
 

@@ -1,32 +1,9 @@
-Program:
-  FunctionDecl: test1 -> void [line 1]:
-    Parameters:
-    Body:
-      Return
-  FunctionDecl: test2 -> int [line 5]:
-    Parameters:
-    Body:
-      Return: 42
-  FunctionDecl: test3 -> float [line 9]:
-    Parameters:
-    Body:
-      Return: 3.14
-  FunctionDecl: test4 -> bool [line 13]:
-    Parameters:
-    Body:
-      Return: true
-  FunctionDecl: test5 -> string [line 17]:
-    Parameters:
-    Body:
-      Return: "hello"
-  FunctionDecl: test6 -> int [line 21]:
-    Parameters:
-      int x
-    Body:
-      IfStmt [line 22]:
-        Condition:
-          (x > 0)
-        Then:
-          Block [line 22-22]:
-            Return: x
-      Return: 0
+Ошибки парсинга:
+  ожидалось имя параметра, получен KW_INT
+  ожидался токен RPAREN, получен KW_INT (строка 21, колонка 12)
+  ожидалось имя, получен RPAREN
+  неожиданный токен в объявлении: KW_IF
+  неожиданный токен в объявлении: KW_RETURN
+  неожиданный токен в объявлении: RBRACE
+  неожиданный токен в объявлении: KW_RETURN
+  неожиданный токен в объявлении: RBRACE

@@ -1,0 +1,72 @@
+.TH MIKROCOMPILER 1 "2026-06-01" "Version 1.0.0" "User Commands"
+.SH NAME
+mikrocompiler \- Mini C-like compiler to x86-64 assembly
+.SH SYNOPSIS
+.B mikrocompiler
+[\fIoptions\fR] \fIfile.src\fR
+.br
+.B mikrocompiler
+[\fIoptions\fR] \fIcommand\fR [\fIarguments\fR]
+.SH DESCRIPTION
+MiniCompiler compiles a simplified C-like language to x86-64 NASM assembly.
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-output\fR \fIfile\fR
+Output file
+.TP
+\fB\-S\fR
+Generate assembly only
+.TP
+\fB\-c\fR
+Compile to object file
+.TP
+\fB\-E\fR
+Preprocess only (output tokens)
+.TP
+\fB\-O\fR, \fB\-\-optimize\fR
+Enable optimizations
+.TP
+\fB\-v\fR, \fB\-\-verbose\fR
+Verbose output
+.TP
+\fB\-\-ast\fR
+Output AST
+.TP
+\fB\-\-ir\fR
+Output IR
+.TP
+\fB\-\-version\fR
+Show version
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Show help
+.SH COMMANDS
+.TP
+\fBlex\fR \fIfile\fR
+Lexical analysis
+.TP
+\fBparse\fR \fIfile\fR
+Parse to AST
+.TP
+\fBcheck\fR \fIfile\fR
+Semantic analysis
+.TP
+\fBsymbols\fR \fIfile\fR
+Symbol table
+.TP
+\fBir\fR \fIfile\fR
+IR generation
+.TP
+\fBcompile\fR \fIfile\fR
+Compile to assembly
+.SH EXAMPLES
+.nf
+mikrocompiler test.src -o program.asm
+mikrocompiler -S -O test.src -o test.asm
+mikrocompiler -c test.src -o test.o
+mikrocompiler --ast test.src
+.fi
+.SH AUTHOR
+Fokin Nikita
+.SH SEE ALSO
+nasm(1), gcc(1), ld(1)

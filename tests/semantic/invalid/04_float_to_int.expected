@@ -3,7 +3,7 @@ global scope (level 0):
   main: function function -> int (line 1)
 
 
- Ошибки 
+=== Ошибки ===
 type_mismatch: cannot assign float to int
   --> line 2, column 5
   |

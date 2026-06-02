@@ -3,9 +3,11 @@ package parser
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"mikrocompiler/src/internal/ast"
 	"mikrocompiler/src/internal/token"
+	"mikrocompiler/src/internal/utils"
 )
 
 type Parser struct {
@@ -13,14 +15,20 @@ type Parser struct {
 	position int
 	current  token.Token
 
-	errors []string
+	errors      []string
+	source      string   // исходный код для вывода строк
+	sourceLines []string // строки исходного кода
+	filename    string
 }
 
-func NewParser(tokens []token.Token) *Parser {
+func NewParser(tokens []token.Token, source string) *Parser {
 	p := &Parser{
-		tokens:   tokens,
-		position: 0,
-		errors:   []string{},
+		tokens:      tokens,
+		position:    0,
+		errors:      []string{},
+		source:      source,
+		sourceLines: strings.Split(source, "\n"),
+		filename:    "", // будет установлено позже
 	}
 	if len(tokens) > 0 {
 		p.current = tokens[0]
@@ -65,7 +73,31 @@ func (p *Parser) consume() token.Token {
 }
 
 func (p *Parser) addError(msg string) {
-	p.errors = append(p.errors, msg)
+	line := p.current.Line
+	column := p.current.Column
+
+	var errMsg strings.Builder
+
+	// Формат: filename:line:column: error: message
+	fmt.Fprintf(&errMsg, "%s:%d:%d: %s: %s\n",
+		utils.BoldText(p.filename),
+		line,
+		column,
+		utils.RedText("синтаксическая ошибка"),
+		msg,
+	)
+
+	// Показываем исходную строку с указателем
+	if line > 0 && line <= len(p.sourceLines) {
+		sourceLine := p.sourceLines[line-1]
+		fmt.Fprintf(&errMsg, " %s | %s\n", utils.GrayText(fmt.Sprintf("%d", line)), sourceLine)
+		fmt.Fprintf(&errMsg, "   | %s%s\n",
+			strings.Repeat(" ", column-1),
+			utils.GreenText("^"),
+		)
+	}
+
+	p.errors = append(p.errors, errMsg.String())
 }
 
 func (p *Parser) synchronize() {

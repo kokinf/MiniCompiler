@@ -203,7 +203,7 @@ func (g *IRGenerator) getTypeSize(typeName string) int {
 
 func (g *IRGenerator) newLabel(prefix string) string {
 	g.labelCounter++
-	return g.currentFunc.NewLabel(prefix)
+	return fmt.Sprintf("%s.%s_%d", g.currentFunc.Name, prefix, g.labelCounter)
 }
 
 func (g *IRGenerator) generateBlockStmt(block *ast.BlockStmtNode) {

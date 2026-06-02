@@ -1,3 +1,29 @@
-Ошибки парсинга:
-  ожидалось имя поля, получен LBRACKET
-  ожидалось имя поля, получен LBRACKET
+Program:
+  StructDecl: Empty [line 1]:
+    Fields:
+  StructDecl: Point [line 4]:
+    Fields:
+      int x
+      int y
+  StructDecl: Line [line 9]:
+    Fields:
+      Point start
+      Point end
+      float length
+  StructDecl: Rectangle [line 15]:
+    Fields:
+      Point topLeft
+      Point bottomRight
+      string label
+      bool isFilled
+  StructDecl: Circle [line 22]:
+    Fields:
+      Point center
+      float radius
+      string color
+  StructDecl: Scene [line 28]:
+    Fields:
+      string name
+      Rectangle[] rectangles
+      Circle[] circles
+      int count

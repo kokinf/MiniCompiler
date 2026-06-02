@@ -6,22 +6,10 @@ function sum: int (int a, int b, int c, int d)
   ;   d: int (offset 32, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param a: int
-  STORE [%t1], a
-  %t2 = ALLOCA 4  ; param b: int
-  STORE [%t2], b
-  %t3 = ALLOCA 4  ; param c: int
-  STORE [%t3], c
-  %t4 = ALLOCA 4  ; param d: int
-  STORE [%t4], d
-  %t5 = LOAD [%t1]
-  %t6 = LOAD [%t2]
-  %t7 = ADD %t5, %t6
-  %t8 = LOAD [%t3]
-  %t9 = ADD %t7, %t8
-  %t10 = LOAD [%t4]
-  %t11 = ADD %t9, %t10
-  RETURN %t11
+  %t1 = ADD a, b
+  %t2 = ADD %t1, c
+  %t3 = ADD %t2, d
+  RETURN %t3
 
 function main: int ()
 

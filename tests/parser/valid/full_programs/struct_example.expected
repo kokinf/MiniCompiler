@@ -1,24 +1,4 @@
-Program:
-  StructDecl: Point [line 1]:
-    Fields:
-      int x
-      int y
-  StructDecl: Rectangle [line 6]:
-    Fields:
-      Point topLeft
-      Point bottomRight
-  FunctionDecl: area -> int [line 11]:
-    Parameters:
-      rect Rectangle
-    Body:
-      VarDecl: int width = (x - x)
-      VarDecl: int height = (y - y)
-      Return: (width * height)
-  FunctionDecl: main -> void [line 17]:
-    Parameters:
-    Body:
-      VarDecl: Point p1
-      VarDecl: Point p2
-      VarDecl: Rectangle rect
-      VarDecl: int a = 0
-      Return
+Ошибки парсинга:
+  ожидался токен SEMICOLON, получен IDENTIFIER (строка 18, колонка 11)
+  ожидался токен SEMICOLON, получен IDENTIFIER (строка 19, колонка 11)
+  ожидался токен SEMICOLON, получен IDENTIFIER (строка 20, колонка 15)

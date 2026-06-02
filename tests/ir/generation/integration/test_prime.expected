@@ -4,37 +4,32 @@ function isPrime: bool (int n)
   ;   n: int (offset 8, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param n: int
-  STORE [%t1], n
-  %t2 = LOAD [%t1]
-  %t3 = CMP_LE %t2, 1
-  JUMP_IF %t3, if_then_1
+  %t1 = CMP_LE n, 1
+  JUMP_IF %t1, if_then_1
   JUMP if_merge_2
 
 if_then_1:
   RETURN false
 
 if_merge_2:
-  %t4 = ALLOCA 4  ; var i: int
-  STORE [%t4], 2
+  %t2 = ALLOCA 4  ; var i: int
+  STORE [%t2], 2
   JUMP while_header_3
 
 while_header_3:
   ; preds: if_merge_2, if_merge_7
-  %t5 = LOAD [%t4]
-  %t6 = LOAD [%t4]
-  %t7 = MUL %t5, %t6
-  %t8 = LOAD [%t1]
-  %t9 = CMP_LE %t7, %t8
-  JUMP_IF %t9, while_body_4
+  %t3 = LOAD [%t2]
+  %t4 = LOAD [%t2]
+  %t5 = MUL %t3, %t4
+  %t6 = CMP_LE %t5, n
+  JUMP_IF %t6, while_body_4
   JUMP while_exit_5
 
 while_body_4:
-  %t10 = LOAD [%t1]
-  %t11 = LOAD [%t4]
-  %t12 = MOD %t10, %t11
-  %t13 = CMP_EQ %t12, 0
-  JUMP_IF %t13, if_then_6
+  %t7 = LOAD [%t2]
+  %t8 = MOD n, %t7
+  %t9 = CMP_EQ %t8, 0
+  JUMP_IF %t9, if_then_6
   JUMP if_merge_7
 
 while_exit_5:
@@ -44,9 +39,9 @@ if_then_6:
   RETURN false
 
 if_merge_7:
-  %t14 = LOAD [%t4]
-  %t15 = ADD %t14, 1
-  STORE [%t4], %t15
+  %t10 = LOAD [%t2]
+  %t11 = ADD %t10, 1
+  STORE [%t2], %t11
   JUMP while_header_3
 
 function main: int ()

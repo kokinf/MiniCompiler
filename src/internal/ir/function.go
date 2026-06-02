@@ -54,6 +54,8 @@ func NewFunction(name, returnType string) *Function {
 		DominatorTree: make(map[string]*BasicBlock),
 		GlobalDefs:    make(map[string]*Instruction),
 		GlobalUses:    make(map[string][]*Instruction),
+		labelCounter:  0, // сбрасываем счётчик
+		tempCounter:   0, // сбрасываем счётчик
 	}
 	f.EntryBlock = f.NewBlock("entry")
 	return f

@@ -3,6 +3,7 @@ APP_NAME = compiler
 MAIN_FILE = ./src/cmd/compiler/main.go
 OUTPUT_DIR = ./bin
 OUTPUT = $(OUTPUT_DIR)/$(APP_NAME)
+VERSION = 1.0.0
 
 # Команды Go
 GO = go
@@ -27,7 +28,6 @@ else
 	MKDIR = mkdir 2>nul || true
 endif
 
-# Полный путь к выходному файлу с расширением
 OUTPUT_FULL = $(OUTPUT)$(EXT)
 
 # Цвета для вывода
@@ -71,139 +71,29 @@ build: $(OUTPUT_DIR)
 $(OUTPUT_DIR):
 	$(MKDIR) $(OUTPUT_DIR)
 
-.PHONY: run
-run: build
-	@echo "$(YELLOW)Запуск парсера на examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) parse --input examples/factorial.src
-
-.PHONY: run-lex
-run-lex: build
-	@echo "$(YELLOW)Запуск лексера на examples/hello.src...$(NC)"
-	$(OUTPUT_FULL) lex --input examples/hello.src
-
-.PHONY: run-parse
-run-parse: build
-	@echo "$(YELLOW)Запуск парсера на examples/struct.src...$(NC)"
-	$(OUTPUT_FULL) parse --input examples/struct.src
-
-.PHONY: check
-check: build
-	@echo "$(YELLOW)Запуск семантического анализа на examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) check --input examples/factorial.src --verbose
-
-.PHONY: check-types
-check-types: build
-	@echo "$(YELLOW)Запуск семантического анализа с выводом типов...$(NC)"
-	$(OUTPUT_FULL) check --input examples/factorial.src --verbose --show-types
-
-.PHONY: symbols
-symbols: build
-	@echo "$(YELLOW)Вывод таблицы символов для examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) symbols --input examples/factorial.src
-
-.PHONY: symbols-json
-symbols-json: build
-	@echo "$(YELLOW)Вывод таблицы символов в JSON формате...$(NC)"
-	$(OUTPUT_FULL) symbols --input examples/factorial.src --format json
-
 # ============================================================================
-# IR (Intermediate Representation) цели
-# ============================================================================
-
-.PHONY: ir
-ir: build
-	@echo "$(YELLOW)Генерация IR для examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src
-
-.PHONY: ir-opt
-ir-opt: build
-	@echo "$(YELLOW)Генерация оптимизированного IR...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src --optimize --stats
-
-.PHONY: ir-dot
-ir-dot: build
-	@echo "$(YELLOW)Генерация CFG в DOT формате...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src --format dot --output cfg.dot
-	@if command -v dot > /dev/null; then \
-		dot -Tpng cfg.dot -o cfg.png; \
-		echo "$(GREEN)CFG сохранён в cfg.png$(NC)"; \
-	else \
-		echo "$(YELLOW)Graphviz не установлен, DOT файл сохранён в cfg.dot$(NC)"; \
-	fi
-
-.PHONY: ir-json
-ir-json: build
-	@echo "$(YELLOW)Генерация IR в JSON...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src --format json
-
-.PHONY: ir-stats
-ir-stats: build
-	@echo "$(YELLOW)Статистика IR для examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src --stats
-
-# ============================================================================
-# Компиляция в ассемблер (Sprint 7)
-# ============================================================================
-
-.PHONY: compile
-compile: build
-	@echo "$(YELLOW)Компиляция factorial.src в ассемблер...$(NC)"
-	$(OUTPUT_FULL) compile --input examples/factorial.src --output build/program.asm
-	@echo "$(GREEN)Ассемблерный код: build/program.asm$(NC)"
-
-.PHONY: compile-opt
-compile-opt: build
-	@echo "$(YELLOW)Компиляция с оптимизациями factorial.src...$(NC)"
-	$(OUTPUT_FULL) compile --input examples/factorial.src --output build/program_opt.asm --optimize
-	@echo "$(GREEN)Оптимизированный ассемблерный код: build/program_opt.asm$(NC)"
-
-.PHONY: build-asm
-build-asm:
-	@echo "$(YELLOW)Сборка исполняемого файла...$(NC)"
-	@if [ -f build/program.asm ]; then \
-		nasm -f elf64 -o build/program.o build/program.asm; \
-		nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm; \
-		gcc -no-pie -o build/program build/runtime.o build/program.o; \
-		echo "$(GREEN)Исполняемый файл: build/program$(NC)"; \
-	else \
-		echo "$(RED)Сначала выполните: make compile$(NC)"; \
-	fi
-
-.PHONY: build-asm-opt
-build-asm-opt:
-	@echo "$(YELLOW)Сборка оптимизированного исполняемого файла...$(NC)"
-	@if [ -f build/program_opt.asm ]; then \
-		nasm -f elf64 -o build/program_opt.o build/program_opt.asm; \
-		nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm; \
-		gcc -no-pie -o build/program_opt build/runtime.o build/program_opt.o; \
-		echo "$(GREEN)Исполняемый файл: build/program_opt$(NC)"; \
-	else \
-		echo "$(RED)Сначала выполните: make compile-opt$(NC)"; \
-	fi
-
-# ============================================================================
-# Демонстрационная программа (Sprint 7)
+# Демонстрация Sprint 8
 # ============================================================================
 
 .PHONY: demo
 demo: build
-	@echo "$(YELLOW)╔══════════════════════════════════════════╗$(NC)"
-	@echo "$(YELLOW)║  MiniCompiler Sprint 7 Demo: Quicksort   ║$(NC)"
-	@echo "$(YELLOW)╚══════════════════════════════════════════╝$(NC)"
+	@echo "$(GREEN)╔══════════════════════════════════════════╗$(NC)"
+	@echo "$(GREEN)║   MiniCompiler v$(VERSION) - Демонстрация  ║$(NC)"
+	@echo "$(GREEN)╚══════════════════════════════════════════╝$(NC)"
 	@echo ""
 	@echo "$(CYAN)1. Компиляция quicksort.src...$(NC)"
-	$(OUTPUT_FULL) compile --input examples/quicksort.src --output build/quicksort.asm --optimize
+	$(OUTPUT_FULL) compile --input examples/demo_quicksort.src --output build/demo_quicksort.asm --optimize
 	@echo ""
 	@echo "$(CYAN)2. Ассемблирование...$(NC)"
-	nasm -f elf64 -o build/quicksort.o build/quicksort.asm
+	nasm -f elf64 -o build/demo_quicksort.o build/demo_quicksort.asm
 	nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm
 	@echo ""
 	@echo "$(CYAN)3. Линковка с libc...$(NC)"
-	gcc -no-pie -o build/quicksort build/runtime.o build/quicksort.o
+	gcc -no-pie -o build/demo_quicksort build/runtime.o build/demo_quicksort.o
 	@echo ""
 	@echo "$(CYAN)4. Запуск программы...$(NC)"
 	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
-	./build/quicksort
+	./build/demo_quicksort
 	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
 	@echo ""
 	@echo "$(GREEN)Демонстрация завершена успешно!$(NC)"
@@ -213,28 +103,75 @@ demo-verbose: build
 	@echo "$(YELLOW)Демонстрация с подробным выводом...$(NC)"
 	@echo ""
 	@echo "$(CYAN)Исходный код:$(NC)"
-	@cat examples/quicksort.src
+	@cat examples/demo_quicksort.src
 	@echo ""
-	@echo "$(CYAN)Генерация IR...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/quicksort.src --stats
-	@echo ""
-	@echo "$(CYAN)Компиляция...$(NC)"
-	$(OUTPUT_FULL) compile --input examples/quicksort.src --output build/quicksort.asm --optimize
+	@echo "$(CYAN)Компиляция с подробным выводом...$(NC)"
+	$(OUTPUT_FULL) compile --input examples/demo_quicksort.src --output build/demo_quicksort.asm --optimize --verbose
 	@echo ""
 	@echo "$(CYAN)Сгенерированный ассемблер (первые 60 строк):$(NC)"
-	@head -60 build/quicksort.asm
+	@head -60 build/demo_quicksort.asm
 	@echo "..."
 	@echo ""
 	@echo "$(CYAN)Сборка и запуск...$(NC)"
-	nasm -f elf64 -o build/quicksort.o build/quicksort.asm
+	nasm -f elf64 -o build/demo_quicksort.o build/demo_quicksort.asm
 	nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm
-	gcc -no-pie -o build/quicksort build/runtime.o build/quicksort.o
+	gcc -no-pie -o build/demo_quicksort build/runtime.o build/demo_quicksort.o
 	@echo "$(GREEN)Вывод программы:$(NC)"
-	./build/quicksort
+	./build/demo_quicksort
+
+.PHONY: demo-complex
+demo-complex: build
+	@echo "$(GREEN)╔══════════════════════════════════════════╗$(NC)"
+	@echo "$(GREEN)║   Комплексная демонстрация                ║$(NC)"
+	@echo "$(GREEN)╚══════════════════════════════════════════╝$(NC)"
+	@echo ""
+	@echo "$(CYAN)1. Компиляция demo_complex.src...$(NC)"
+	$(OUTPUT_FULL) examples/demo_complex.src -o build/demo_complex.asm
+	@echo ""
+	@echo "$(CYAN)2. Ассемблирование...$(NC)"
+	nasm -f elf64 -o build/demo_complex.o build/demo_complex.asm
+	nasm -f elf64 -o build/runtime.o src/runtime/runtime.asm
+	@echo ""
+	@echo "$(CYAN)3. Линковка...$(NC)"
+	gcc -no-pie -o build/demo_complex build/runtime.o build/demo_complex.o
+	@echo ""
+	@echo "$(CYAN)4. Запуск...$(NC)"
+	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
+	./build/demo_complex
+	@echo "$(GREEN)──────────────────────────────────────────$(NC)"
+	@echo ""
+	@echo "$(GREEN)Демонстрация завершена!$(NC)"
+
+# ============================================================================
+# Компиляция примеров
+# ============================================================================
+
+.PHONY: examples
+examples: build
+	@echo "$(YELLOW)Компиляция всех примеров...$(NC)"
+	@for file in examples/*.src; do \
+		name=$$(basename "$$file" .src); \
+		echo "  $$file -> build/$$name.asm"; \
+		$(OUTPUT_FULL) compile --input "$$file" --output "build/$$name.asm"; \
+	done
+	@echo "$(GREEN)Все примеры скомпилированы$(NC)"
 
 # ============================================================================
 # Тестирование
 # ============================================================================
+
+.PHONY: install-man
+install-man:
+	@echo "$(YELLOW)Установка man page...$(NC)"
+	sudo mkdir -p /usr/local/share/man/man1
+	sudo cp mikrocompiler.1 /usr/local/share/man/man1/
+	sudo mandb
+	@echo "$(GREEN)Man page установлена. Используйте: man mikrocompiler$(NC)"
+
+.PHONY: test-final
+test-final: build
+	@echo "$(YELLOW)Запуск финальных тестов...$(NC)"
+	@bash tests/run_final_tests.sh
 
 .PHONY: test
 test: build
@@ -287,58 +224,31 @@ test-control-flow: build
 		cd tests/test_runner && bash run_tests.sh control-flow; \
 	fi
 
-.PHONY: test-control-flow-verbose
-test-control-flow-verbose: build
-	@echo "$(YELLOW)Запуск тестов Control Flow (verbose)...$(NC)"
-	@if [ -f tests/test_runner/run_tests.sh ]; then \
-		cd tests/test_runner && bash run_tests.sh control-flow true; \
-	fi
-
-.PHONY: test-go
-test-go:
-	@echo "$(YELLOW)Запуск Go unit тестов...$(NC)"
-	$(GO) test ./src/internal/... -v
-
 .PHONY: test-all
-test-all: build test-go
-	@echo "$(YELLOW)Запуск integration тестов...$(NC)"
+test-all: build
+	@echo "$(YELLOW)Запуск всех тестов...$(NC)"
+	$(GO) test ./src/internal/... -v
 	@if [ -f tests/test_runner/run_tests.sh ]; then \
 		cd tests/test_runner && bash run_tests.sh all; \
 	fi
 
+.PHONY: test-report
+test-report: build
+	@echo "$(YELLOW)Запуск тестов с отчётом...$(NC)"
+	@bash tests/test_runner/run_tests.sh all 2>&1 | tee test_report.log
+	@echo "$(GREEN)Отчёт сохранён в test_report.log$(NC)"
+
 # ============================================================================
-# Golden testing
+# Информация о компиляторе
 # ============================================================================
 
-.PHONY: golden-generate
-golden-generate: build
-	@echo "$(YELLOW)Генерация golden testing файлов...$(NC)"
-	@bash scripts/generate_golden_ir.sh
-	@echo "$(GREEN)Golden testing файлы сгенерированы$(NC)"
+.PHONY: version
+version: build
+	$(OUTPUT_FULL) --version
 
-.PHONY: golden-update
-golden-update: build
-	@echo "$(YELLOW)Обновление golden testing файлов...$(NC)"
-	@bash scripts/update_golden.sh update
-	@echo "$(GREEN)Golden testing файлы обновлены$(NC)"
-
-.PHONY: golden-check
-golden-check: build
-	@echo "$(YELLOW)Проверка golden testing файлов...$(NC)"
-	@bash scripts/update_golden.sh check verbose
-	@echo "$(GREEN)Проверка завершена$(NC)"
-
-.PHONY: golden-validate
-golden-validate:
-	@echo "$(YELLOW)Валидация структуры golden testing файлов...$(NC)"
-	@bash scripts/validate_golden.sh
-	@echo "$(GREEN)Валидация завершена$(NC)"
-
-.PHONY: golden-clean
-golden-clean:
-	@echo "$(YELLOW)Очистка golden testing файлов...$(NC)"
-	@bash scripts/generate_golden_ir.sh --clean
-	@echo "$(GREEN)Golden testing файлы удалены$(NC)"
+.PHONY: help-compiler
+help-compiler: build
+	$(OUTPUT_FULL) --help
 
 # ============================================================================
 # Управление зависимостями
@@ -368,6 +278,7 @@ clean:
 	-$(RMDIR) $(OUTPUT_DIR)
 	-$(RMDIR) build
 	-$(RM) cfg.dot cfg.png ast.dot ast.png *.ir
+	-$(RM) test_report.log
 	$(GO) clean
 	@echo "$(GREEN)Очистка завершена$(NC)"
 
@@ -375,6 +286,13 @@ clean:
 clean-all: clean
 	@echo "$(YELLOW)Очистка кэша Go...$(NC)"
 	$(GO) clean -cache -modcache -i -r
+	@echo "$(GREEN)Полная очистка завершена$(NC)"
+
+.PHONY: distclean
+distclean: clean
+	@echo "$(YELLOW)Полная очистка...$(NC)"
+	$(GO) clean -cache -modcache -testcache
+	-$(RM) -rf tests/golden/expected
 	@echo "$(GREEN)Полная очистка завершена$(NC)"
 
 # ============================================================================
@@ -399,46 +317,61 @@ lint: vet
 	@which golint > /dev/null && golint ./... || echo "golint не установлен"
 
 # ============================================================================
-# Генерация AST изображений
-# ============================================================================
-
-.PHONY: generate-ast-png
-generate-ast-png: build
-	@echo "$(YELLOW)Генерация AST для examples/factorial.src...$(NC)"
-	$(OUTPUT_FULL) parse --input examples/factorial.src --format dot --output ast.dot
-	@if command -v dot > /dev/null; then \
-		dot -Tpng ast.dot -o ast.png; \
-		echo "$(GREEN)AST сохранён в ast.png$(NC)"; \
-	fi
-
-.PHONY: generate-all-asts
-generate-all-asts: build
-	@echo "$(YELLOW)Генерация AST для всех примеров...$(NC)"
-	@for srcfile in examples/*.src; do \
-		name=$$(basename "$$srcfile" .src); \
-		echo "  $$srcfile -> ast_$$name.dot"; \
-		$(OUTPUT_FULL) parse --input "$$srcfile" --format dot --output "ast_$$name.dot"; \
-		if command -v dot > /dev/null; then \
-			dot -Tpng "ast_$$name.dot" -o "ast_$$name.png"; \
-			echo "  ast_$$name.png создан"; \
-		fi \
-	done
-	@echo "$(GREEN)Все AST сгенерированы$(NC)"
-
-# ============================================================================
-# Установка и запуск
+# Установка и распространение
 # ============================================================================
 
 .PHONY: install
 install: build
-	@echo "$(YELLOW)Установка компилятора в GOPATH/bin...$(NC)"
-	$(GO) install $(MAIN_FILE)
-	@echo "$(GREEN)Установка завершена$(NC)"
+	@echo "$(YELLOW)Установка компилятора в /usr/local/bin...$(NC)"
+	sudo cp $(OUTPUT_FULL) /usr/local/bin/mikrocompiler
+	@echo "$(GREEN)Установка завершена!$(NC)"
+	@echo "Теперь можно использовать: mikrocompiler --help"
 
-.PHONY: dev
-dev: build
-	@echo "$(YELLOW)Запуск в режиме разработки...$(NC)"
-	$(OUTPUT_FULL) ir --input examples/factorial.src --optimize --stats
+.PHONY: uninstall
+uninstall:
+	@echo "$(YELLOW)Удаление компилятора...$(NC)"
+	sudo rm -f /usr/local/bin/mikrocompiler
+	@echo "$(GREEN)Удаление завершено$(NC)"
+
+.PHONY: dist
+dist: build
+	@echo "$(YELLOW)Создание дистрибутива...$(NC)"
+	@mkdir -p dist/mikrocompiler-$(VERSION)
+	@cp $(OUTPUT_FULL) dist/mikrocompiler-$(VERSION)/
+	@cp src/runtime/runtime.asm dist/mikrocompiler-$(VERSION)/
+	@cp src/libc/stdlib.h dist/mikrocompiler-$(VERSION)/
+	@cp -r examples dist/mikrocompiler-$(VERSION)/
+	@cp README.md dist/mikrocompiler-$(VERSION)/
+	@cp Makefile dist/mikrocompiler-$(VERSION)/
+	@cd dist && tar czf mikrocompiler-$(VERSION).tar.gz mikrocompiler-$(VERSION)
+	@echo "$(GREEN)Дистрибутив создан: dist/mikrocompiler-$(VERSION).tar.gz$(NC)"
+	@echo "Размер: $$(du -h dist/mikrocompiler-$(VERSION).tar.gz | cut -f1)"
+
+# ============================================================================
+# Генерация AST/CFG изображений
+# ============================================================================
+
+.PHONY: ast
+ast: build
+	@echo "$(YELLOW)Генерация AST для examples/demo_quicksort.src...$(NC)"
+	$(OUTPUT_FULL) parse --input examples/demo_quicksort.src --format dot --output ast.dot
+	@if command -v dot > /dev/null; then \
+		dot -Tpng ast.dot -o ast.png; \
+		echo "$(GREEN)AST сохранён в ast.png$(NC)"; \
+	else \
+		echo "$(YELLOW)Graphviz не установлен, DOT файл сохранён в ast.dot$(NC)"; \
+	fi
+
+.PHONY: cfg
+cfg: build
+	@echo "$(YELLOW)Генерация CFG для examples/demo_quicksort.src...$(NC)"
+	$(OUTPUT_FULL) ir --input examples/demo_quicksort.src --format dot --output cfg.dot
+	@if command -v dot > /dev/null; then \
+		dot -Tpng cfg.dot -o cfg.png; \
+		echo "$(GREEN)CFG сохранён в cfg.png$(NC)"; \
+	else \
+		echo "$(YELLOW)Graphviz не установлен, DOT файл сохранён в cfg.dot$(NC)"; \
+	fi
 
 # ============================================================================
 # Справка
@@ -446,118 +379,51 @@ dev: build
 
 .PHONY: help
 help:
-	@echo "$(BLUE)MiniCompiler - Доступные цели$(NC)"
+	@echo "$(BLUE)MiniCompiler v$(VERSION) - Доступные цели$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Сборка и запуск:$(NC)"
 	@echo "  make build           - Собрать компилятор"
-	@echo "  make run             - Запустить парсер на examples/factorial.src"
-	@echo "  make run-lex         - Запустить лексер на examples/hello.src"
-	@echo "  make run-parse       - Запустить парсер на examples/struct.src"
-	@echo "  make check           - Запустить семантический анализ"
-	@echo "  make check-types     - Семантический анализ с выводом типов"
-	@echo "  make symbols         - Вывести таблицу символов"
-	@echo "  make compile         - Скомпилировать в ассемблер"
-	@echo "  make compile-opt     - Скомпилировать с оптимизациями"
-	@echo "  make build-asm       - Собрать исполняемый файл"
-	@echo "  make build-asm-opt   - Собрать оптимизированный исполняемый файл"
-	@echo "  make install         - Установить в GOPATH/bin"
-	@echo "  make dev             - Запуск в режиме разработки"
+	@echo "  make clean           - Очистить артефакты сборки"
+	@echo "  make version         - Показать версию"
+	@echo "  make help-compiler   - Справка по компилятору"
 	@echo ""
-	@echo "$(YELLOW)Демонстрация (Sprint 7):$(NC)"
-	@echo "  make demo            - Запустить демо (Quicksort)"
+	@echo "$(YELLOW)Демонстрация:$(NC)"
+	@echo "  make demo            - Запустить демо (QuickSort)"
 	@echo "  make demo-verbose    - Демо с подробным выводом"
+	@echo "  make demo-complex    - Комплексная демонстрация"
 	@echo ""
-	@echo "$(YELLOW)Генерация IR:$(NC)"
-	@echo "  make ir              - Сгенерировать IR для factorial.src"
-	@echo "  make ir-opt          - Сгенерировать оптимизированный IR"
-	@echo "  make ir-dot          - Сгенерировать CFG в PNG"
-	@echo "  make ir-json         - Сгенерировать IR в JSON"
-	@echo "  make ir-stats        - Показать статистику IR"
+	@echo "$(YELLOW)Компиляция примеров:$(NC)"
+	@echo "  make examples        - Скомпилировать все примеры"
 	@echo ""
 	@echo "$(YELLOW)Тестирование:$(NC)"
-	@echo "  make test                  - Запустить все тесты"
-	@echo "  make test-lexer            - Запустить только тесты лексера"
-	@echo "  make test-parser           - Запустить только тесты парсера"
-	@echo "  make test-semantic         - Запустить только семантические тесты"
-	@echo "  make test-ir               - Запустить тесты IR"
-	@echo "  make test-codegen          - Запустить тесты кодогенерации"
-	@echo "  make test-control-flow     - Тесты Control Flow"
-	@echo "  make test-control-flow-verbose - Тесты Control Flow подробно"
-	@echo "  make test-go               - Запустить Go unit тесты"
-	@echo "  make test-all              - Запустить все тесты (unit + integration)"
-	@echo ""
-	@echo "$(YELLOW)Golden testing:$(NC)"
-	@echo "  make golden-generate - Сгенерировать expected файлы"
-	@echo "  make golden-update   - Обновить expected файлы"
-	@echo "  make golden-check    - Проверить expected файлы"
-	@echo "  make golden-validate - Валидировать структуру"
-	@echo "  make golden-clean    - Удалить expected файлы"
-	@echo ""
-	@echo "$(YELLOW)Генерация изображений AST:$(NC)"
-	@echo "  make generate-ast-png   - Сгенерировать PNG для factorial.src"
-	@echo "  make generate-all-asts  - Сгенерировать PNG для всех примеров"
+	@echo "  make test            - Запустить все тесты"
+	@echo "  make test-lexer      - Тесты лексера"
+	@echo "  make test-parser     - Тесты парсера"
+	@echo "  make test-semantic   - Семантические тесты"
+	@echo "  make test-ir         - Тесты IR"
+	@echo "  make test-codegen    - Тесты кодогенерации"
+	@echo "  make test-all        - Все тесты (unit + integration)"
+	@echo "  make test-report     - Тесты с отчётом"
 	@echo ""
 	@echo "$(YELLOW)Качество кода:$(NC)"
-	@echo "  make fmt              - Форматировать код"
-	@echo "  make vet              - Запустить статический анализатор"
-	@echo "  make lint             - Запустить линтер"
+	@echo "  make fmt             - Форматировать код"
+	@echo "  make vet             - Статический анализатор"
+	@echo "  make lint            - Линтер"
 	@echo ""
 	@echo "$(YELLOW)Управление зависимостями:$(NC)"
-	@echo "  make deps             - Загрузить зависимости"
-	@echo "  make tidy             - Очистить зависимости"
+	@echo "  make deps            - Загрузить зависимости"
+	@echo "  make tidy            - Очистить зависимости"
+	@echo ""
+	@echo "$(YELLOW)Установка и распространение:$(NC)"
+	@echo "  make install         - Установить в /usr/local/bin"
+	@echo "  make uninstall       - Удалить из системы"
+	@echo "  make dist            - Создать дистрибутив"
+	@echo ""
+	@echo "$(YELLOW)Визуализация:$(NC)"
+	@echo "  make ast             - Сгенерировать AST (PNG)"
+	@echo "  make cfg             - Сгенерировать CFG (PNG)"
 	@echo ""
 	@echo "$(YELLOW)Очистка:$(NC)"
-	@echo "  make clean            - Очистить артефакты сборки"
-	@echo "  make clean-all        - Полная очистка (включая кэш Go)"
-
-# ============================================================================
-# Специфичные для Windows настройки
-# ============================================================================
-
-ifeq ($(OS),Windows_NT)
-run:
-	$(OUTPUT_FULL) parse --input examples\factorial.src
-
-run-lex:
-	$(OUTPUT_FULL) lex --input examples\hello.src
-
-run-parse:
-	$(OUTPUT_FULL) parse --input examples\struct.src
-
-check:
-	$(OUTPUT_FULL) check --input examples\factorial.src --verbose
-
-symbols:
-	$(OUTPUT_FULL) symbols --input examples\factorial.src
-
-ir:
-	$(OUTPUT_FULL) ir --input examples\factorial.src
-
-ir-opt:
-	$(OUTPUT_FULL) ir --input examples\factorial.src --optimize --stats
-
-compile:
-	$(OUTPUT_FULL) compile --input examples\factorial.src --output build\program.asm
-
-test:
-	@if exist tests\test_runner\run_tests.bat ( \
-		cd tests\test_runner && run_tests.bat \
-	) else ( \
-		echo Тестовый раннер не найден \
-	)
-
-test-lexer:
-	@if exist tests\test_runner\run_tests.bat ( \
-		cd tests\test_runner && run_tests.bat lexer \
-	)
-
-test-parser:
-	@if exist tests\test_runner\run_tests.bat ( \
-		cd tests\test_runner && run_tests.bat parser \
-	)
-
-test-semantic:
-	@if exist tests\test_runner\run_tests.bat ( \
-		cd tests\test_runner && run_tests.bat semantic \
-	)
-endif
+	@echo "  make clean           - Очистить артефакты"
+	@echo "  make clean-all       - Очистить всё (включая кэш)"
+	@echo "  make distclean       - Полная очистка"

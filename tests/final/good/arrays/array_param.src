@@ -1,0 +1,12 @@
+int sum_arr(int arr[], int size) {
+    int sum = 0;
+    for (int i = 0; i < size; i = i + 1) {
+        sum = sum + arr[i];
+    }
+    return sum;
+}
+
+int main() {
+    int arr[4] = {1, 2, 3, 4};
+    return sum_arr(arr, 4);
+}

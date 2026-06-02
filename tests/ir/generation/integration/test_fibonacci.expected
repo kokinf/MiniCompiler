@@ -3,28 +3,22 @@ function fib: int (int n)
   ;   n: int (offset 8, size 4)
 
 entry:
-  %t1 = ALLOCA 4  ; param n: int
-  STORE [%t1], n
-  %t2 = LOAD [%t1]
-  %t3 = CMP_LE %t2, 1
-  JUMP_IF %t3, if_then_1
+  %t1 = CMP_LE n, 1
+  JUMP_IF %t1, if_then_1
   JUMP if_merge_2
 
 if_then_1:
-  %t4 = LOAD [%t1]
-  RETURN %t4
+  RETURN n
 
 if_merge_2:
-  %t5 = LOAD [%t1]
-  %t6 = SUB %t5, 1
-  PARAM 0, %t6
-  %t7 = CALL fib(%t6)
-  %t8 = LOAD [%t1]
-  %t9 = SUB %t8, 2
-  PARAM 0, %t9
-  %t10 = CALL fib(%t9)
-  %t11 = ADD %t7, %t10
-  RETURN %t11
+  %t2 = SUB n, 1
+  PARAM 0, %t2
+  %t3 = CALL fib(%t2)
+  %t4 = SUB n, 2
+  PARAM 0, %t4
+  %t5 = CALL fib(%t4)
+  %t6 = ADD %t3, %t5
+  RETURN %t6
 
 function main: int ()
 
